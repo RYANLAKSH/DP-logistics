@@ -1,0 +1,17 @@
+{
+  "name": "@dp/api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --watch src/main.ts",
+    "start": "node --experimental-strip-types src/main.ts",
+    "test": "node --experimental-strip-types --test src/__tests__/*.test.ts"
+  },
+  "dependencies": {
+    "@dp/shared-rules": "*",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.5",
+    "zod": "^3.24.1"
+  }
+}
