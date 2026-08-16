@@ -1,0 +1,11 @@
+{
+  "name": "dp-logistics",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "seed": "npm run seed -w @dp/fixtures"
+  }
+}

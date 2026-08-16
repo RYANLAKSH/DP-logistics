@@ -1,0 +1,11 @@
+{
+  "name": "@dp/fixtures",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "seed": "node --experimental-strip-types src/cli.ts",
+    "demo": "node --experimental-strip-types src/demo.ts",
+    "test": "node --experimental-strip-types --test src/__tests__/*.test.ts"
+  },
+  "dependencies": { "@dp/shared-rules": "*" }
+}
