@@ -107,13 +107,34 @@ use your machine's LAN address:
 EXPO_PUBLIC_API_BASE=http://192.168.1.20:3000 npx expo start
 ```
 
+## The admin panel
+
+Served by the API at **http://localhost:3000/admin/index.html** — no build step,
+no second process. Sign in with the admin or supervisor account above.
+
+- **Upload report** — paste or pick a CSV, preview, commit. Rejected rows are
+  listed with their reason code and are not committed.
+- **Reconciliations** — live table, filterable by outcome.
+- **Email log** — every send with its delivery status.
+- **Recipients** — who gets told, per event.
+
+Verified end to end in Chromium against the live API: login, preview (24 valid /
+2 rejected with the correct reason codes), commit, the reconciliation table,
+outcome filtering, and adding a recipient.
+
+Keeping it a static page served by the API is a deliberate simplification: one
+process, one origin, no bundler. Moving it to a separate Next.js app later is a
+deployment change — the API surface it consumes does not change.
+
 ## What is not built yet
 
-- **Admin panel** (Next.js). The API endpoints it needs exist and are tested —
-  report preview/commit, user and device management, notification recipients,
-  dashboard summary — but there is no web UI over them.
-- **Image upload to object storage.** Scans carry a local image URI and a SHA-256
-  field; the presigned-URL flow described in `docs/api.md` is not wired.
+- **Image upload to object storage.** Scans carry a local image URI and a
+  SHA-256 field, but the presigned-URL flow in `docs/api.md` is not wired, so
+  evidence photos currently stay on the device. This is the most important gap:
+  the audit trail is only as good as the images behind it.
 - **PDF report ingest.** CSV and XLSX-as-CSV work; PDF table extraction is phase 3.
-- **BullMQ/Redis.** Email currently sends inline after commit rather than through
-  a queue. Fine at pilot volume, needs the queue before scale.
+- **BullMQ/Redis.** Email sends inline after commit rather than through a queue.
+  Fine at pilot volume, needs the queue before scale.
+- **Supervisor override UI.** The endpoint exists and is tested; there is no
+  button for it in the panel yet.
+- **Mobile screens on hardware.** See the caveat above.

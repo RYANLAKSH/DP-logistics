@@ -5,6 +5,8 @@
  * reconciliation rules live in @dp/shared-rules and nowhere else.
  */
 
+import { fileURLToPath } from 'node:url';
+
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 
@@ -615,6 +617,13 @@ export function createServer(db: Db) {
   });
 
   app.get('/v1/health', (_req, res) => res.json({ status: 'ok', time: nowIso() }));
+
+  // The admin panel is a single no-build page served from the API, so there is
+  // one process to run in development and no separate origin to configure.
+  // Splitting it into its own Next.js app is a deployment concern, not an
+  // architectural one — the API surface it consumes is unchanged either way.
+  const adminDir = fileURLToPath(new URL('../../admin/', import.meta.url));
+  app.use('/admin', express.static(adminDir));
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

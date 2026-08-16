@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DP Reconcile — Admin</title>
+<style>
+  :root {
+    --bg: #0f1720; --surface: #1b2530; --surface-2: #232f3c;
+    --text: #f2f5f8; --muted: #93a1b0; --border: #33414f;
+    --accent: #2f6fed; --pass: #22c55e; --block: #ef4444; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  header .who { margin-left: auto; color: var(--muted); font-size: 14px; }
+  nav { display: flex; gap: 4px; padding: 12px 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  nav button {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 14px;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.active { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+  main { padding: 24px; max-width: 1200px; }
+  section { display: none; }
+  section.active { display: block; }
+  h2 { font-size: 20px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input, textarea, select {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font-size: 14px; font-family: inherit;
+  }
+  textarea { min-height: 160px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  button.primary {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost {
+    background: none; color: var(--accent); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 16px; cursor: pointer; font-size: 14px;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.mono, th.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .scroll { overflow-x: auto; }
+
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.pass { background: #08351c; color: var(--pass); }
+  .pill.block { background: #3d1113; color: var(--block); }
+  .pill.warn { background: #3a2c07; color: var(--warn); }
+
+  .stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .stat .n { font-size: 28px; font-weight: 700; }
+  .stat .k { color: var(--muted); font-size: 13px; }
+  .stat.bad .n { color: var(--block); }
+  .stat.good .n { color: var(--pass); }
+
+  .msg { padding: 12px 14px; border-radius: 8px; margin: 14px 0; font-size: 14px; }
+  .msg.err { background: #3d1113; color: #fca5a5; }
+  .msg.ok { background: #08351c; color: #86efac; }
+  .hidden { display: none !important; }
+  .login { max-width: 380px; margin: 80px auto; }
+  .errlist { color: var(--block); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="login">
+  <div class="card">
+    <h2>DP Reconcile</h2>
+    <p class="sub">Administration</p>
+    <div style="display:grid;gap:12px">
+      <div><label>Email</label><input id="email" type="email" autocomplete="username"></div>
+      <div><label>Password</label><input id="password" type="password" autocomplete="current-password"></div>
+      <button class="primary" id="loginBtn">Sign in</button>
+    </div>
+    <div id="loginMsg"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>DP Reconcile</h1>
+    <span class="who" id="who"></span>
+    <button class="ghost" id="logoutBtn">Sign out</button>
+  </header>
+
+  <nav>
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="upload">Upload report</button>
+    <button data-tab="recons">Reconciliations</button>
+    <button data-tab="notifications">Email log</button>
+    <button data-tab="recipients">Recipients</button>
+  </nav>
+
+  <main>
+    <section id="dashboard" class="active">
+      <h2>Today</h2>
+      <p class="sub">Live reconciliation state across all locations.</p>
+      <div class="stats" id="stats"></div>
+      <div class="card" style="margin-top:16px">
+        <h3 style="margin:0 0 4px;font-size:15px">OCR accuracy</h3>
+        <p class="sub" style="margin:0 0 12px">
+          Share of scans where the engine's proposal survived officer confirmation unchanged.
+          Container and VIN will diverge sharply — that gap is where to spend effort.
+        </p>
+        <div id="ocr"></div>
+      </div>
+    </section>
+
+    <section id="upload">
+      <h2>Upload pickup report</h2>
+      <p class="sub">
+        Paste the CSV the DO sent. Nothing goes live until you commit — a bad import
+        silently blocks every vehicle at the gate.
+      </p>
+
+      <div class="card">
+        <label>CSV contents</label>
+        <textarea id="csv" placeholder="Paste the pickup report CSV, including its header preamble"></textarea>
+        <div class="row">
+          <button class="ghost" id="previewBtn">Preview</button>
+          <input type="file" id="file" accept=".csv,text/csv" style="width:auto">
+        </div>
+      </div>
+
+      <div id="previewOut"></div>
+
+      <div class="card hidden" id="commitCard">
+        <h3 style="margin:0 0 14px;font-size:15px">Commit</h3>
+        <div class="grid">
+          <div><label>Reference no</label><input id="referenceNo"></div>
+          <div><label>Delivery order</label><input id="deliveryOrder"></div>
+          <div><label>Valid from</label><input id="validFrom" type="date"></div>
+          <div><label>Valid to</label><input id="validTo" type="date"></div>
+          <div><label>Location</label><select id="locationId"></select></div>
+        </div>
+        <div class="row"><button class="primary" id="commitBtn">Commit report</button></div>
+        <div id="commitMsg"></div>
+      </div>
+    </section>
+
+    <section id="recons">
+      <h2>Reconciliations</h2>
+      <p class="sub">Most recent first. Exceptions are what need action.</p>
+      <div class="row" style="margin:0 0 14px">
+        <select id="outcomeFilter" style="width:auto">
+          <option value="">All outcomes</option>
+          <option value="MATCH">MATCH</option>
+          <option value="WRONG_CONTAINER">WRONG_CONTAINER</option>
+          <option value="VIN_NOT_IN_REPORT">VIN_NOT_IN_REPORT</option>
+          <option value="CONTAINER_NOT_IN_REPORT">CONTAINER_NOT_IN_REPORT</option>
+          <option value="DUPLICATE_VIN">DUPLICATE_VIN</option>
+          <option value="CONTAINER_FULL">CONTAINER_FULL</option>
+        </select>
+        <button class="ghost" id="reconRefresh">Refresh</button>
+      </div>
+      <div class="card scroll"><table id="reconTable"></table></div>
+    </section>
+
+    <section id="notifications">
+      <h2>Email log</h2>
+      <p class="sub">Every send is recorded. "Did the email go out?" is answerable here.</p>
+      <div class="card scroll"><table id="notifTable"></table></div>
+    </section>
+
+    <section id="recipients">
+      <h2>Notification recipients</h2>
+      <p class="sub">Who gets told, per event. Configured here rather than hardcoded.</p>
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label>Event</label>
+            <select id="recEvent">
+              <option>MATCH</option>
+              <option>CONTAINER_COMPLETE</option>
+              <option>WRONG_CONTAINER</option>
+              <option>VIN_NOT_IN_REPORT</option>
+              <option>CONTAINER_NOT_IN_REPORT</option>
+              <option>DUPLICATE_VIN</option>
+              <option>CONTAINER_FULL</option>
+              <option>EXPIRED_REPORT</option>
+              <option>OVERRIDE_APPLIED</option>
+            </select>
+          </div>
+          <div><label>Email</label><input id="recEmail" type="email"></div>
+        </div>
+        <div class="row"><button class="primary" id="recAdd">Add recipient</button></div>
+        <div id="recMsg"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const state = { token: null, user: null, locations: [], preview: null };
+
+/* ---------------- API ---------------- */
+
+async function api(method, path, body, asText) {
+  const headers = { 'content-type': asText ? 'text/csv' : 'application/json' };
+  if (state.token) headers.authorization = `Bearer ${state.token}`;
+
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: body === undefined ? undefined : (asText ? body : JSON.stringify(body)),
+  });
+
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(json?.error?.message || `Request failed (${res.status})`);
+  return json;
+}
+
+const esc = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+const note = (el, text, kind) => { el.innerHTML = `<div class="msg ${kind}">${esc(text)}</div>`; };
+
+/* ---------------- Auth ---------------- */
+
+$('loginBtn').onclick = async () => {
+  try {
+    const result = await api('POST', '/v1/auth/login', {
+      email: $('email').value.trim(),
+      password: $('password').value,
+    });
+    if (!['admin', 'supervisor'].includes(result.user.role)) {
+      throw new Error('This panel requires a supervisor or admin account');
+    }
+    state.token = result.accessToken;
+    state.user = result.user;
+    state.locations = result.locations || [];
+
+    $('login').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    $('who').textContent = `${result.user.fullName} · ${result.user.role}`;
+
+    $('locationId').innerHTML = state.locations
+      .map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('');
+
+    await Promise.all([loadDashboard(), loadRecons(), loadNotifications()]);
+  } catch (error) {
+    note($('loginMsg'), error.message, 'err');
+  }
+};
+
+$('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+
+$('logoutBtn').onclick = () => {
+  state.token = null;
+  $('app').classList.add('hidden');
+  $('login').classList.remove('hidden');
+  $('loginMsg').innerHTML = '';
+};
+
+/* ---------------- Tabs ---------------- */
+
+document.querySelectorAll('nav button').forEach((button) => {
+  button.onclick = () => {
+    document.querySelectorAll('nav button').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('section').forEach((s) => s.classList.remove('active'));
+    button.classList.add('active');
+    $(button.dataset.tab).classList.add('active');
+
+    if (button.dataset.tab === 'dashboard') loadDashboard();
+    if (button.dataset.tab === 'recons') loadRecons();
+    if (button.dataset.tab === 'notifications') loadNotifications();
+  };
+});
+
+/* ---------------- Dashboard ---------------- */
+
+async function loadDashboard() {
+  try {
+    const s = await api('GET', '/v1/admin/dashboard/summary');
+    $('stats').innerHTML = `
+      <div class="stat"><div class="n">${s.total}</div><div class="k">Reconciliations</div></div>
+      <div class="stat good"><div class="n">${s.match}</div><div class="k">Matched</div></div>
+      <div class="stat bad"><div class="n">${s.exceptions}</div><div class="k">Exceptions</div></div>
+      <div class="stat"><div class="n">${(s.overrideRate * 100).toFixed(1)}%</div><div class="k">Override rate</div></div>
+    `;
+
+    const rows = Object.entries(s.ocrAccuracy || {});
+    $('ocr').innerHTML = rows.length
+      ? rows.map(([type, accuracy]) =>
+          `<div style="display:flex;justify-content:space-between;padding:6px 0">
+             <span>${esc(type)}</span>
+             <strong>${accuracy == null ? '—' : (accuracy * 100).toFixed(1) + '%'}</strong>
+           </div>`).join('')
+      : '<span class="sub">No scans recorded yet.</span>';
+  } catch (error) {
+    note($('stats'), error.message, 'err');
+  }
+}
+
+/* ---------------- Upload ---------------- */
+
+$('file').onchange = async (event) => {
+  const file = event.target.files?.[0];
+  if (file) $('csv').value = await file.text();
+};
+
+$('previewBtn').onclick = async () => {
+  const out = $('previewOut');
+  try {
+    const preview = await api('POST', '/v1/admin/reports/preview', $('csv').value, true);
+    state.preview = preview;
+
+    const rejected = preview.rows.filter((row) => row.errors.length);
+
+    out.innerHTML = `
+      <div class="card">
+        <div class="stats" style="margin-bottom:16px">
+          <div class="stat good"><div class="n">${preview.validCount}</div><div class="k">Valid rows</div></div>
+          <div class="stat ${preview.rejectedCount ? 'bad' : ''}"><div class="n">${preview.rejectedCount}</div><div class="k">Rejected</div></div>
+          <div class="stat"><div class="n">${preview.containers.length}</div><div class="k">Containers</div></div>
+        </div>
+        <div class="scroll">
+          <table>
+            <tr><th>Container</th><th>Vehicles</th></tr>
+            ${preview.containers.map((c) =>
+              `<tr><td class="mono">${esc(c.containerNo)}</td><td>${c.vehicleCount}</td></tr>`).join('')}
+          </table>
+        </div>
+        ${rejected.length ? `
+          <h3 style="margin:20px 0 8px;font-size:15px">Rejected rows</h3>
+          <p class="sub" style="margin:0 0 10px">
+            These are not committed. Fix them at source — the system will not guess a
+            corrected container number on the DO's behalf.
+          </p>
+          <div class="scroll"><table>
+            <tr><th>#</th><th class="mono">Container</th><th class="mono">VIN</th><th>Reason</th></tr>
+            ${rejected.map((row) => `<tr>
+              <td>${row.lineNo}</td>
+              <td class="mono">${esc(row.containerNo)}</td>
+              <td class="mono">${esc(row.vin)}</td>
+              <td class="errlist">${row.errors.map(esc).join(', ')}</td>
+            </tr>`).join('')}
+          </table></div>` : ''}
+      </div>`;
+
+    $('commitCard').classList.toggle('hidden', preview.validCount === 0);
+  } catch (error) {
+    state.preview = null;
+    $('commitCard').classList.add('hidden');
+    note(out, error.message, 'err');
+  }
+};
+
+$('commitBtn').onclick = async () => {
+  try {
+    const result = await api('POST', '/v1/admin/reports/commit', {
+      csv: $('csv').value,
+      locationId: $('locationId').value,
+      referenceNo: $('referenceNo').value.trim(),
+      deliveryOrder: $('deliveryOrder').value.trim(),
+      validFrom: $('validFrom').value,
+      validTo: $('validTo').value,
+    });
+    note($('commitMsg'),
+      `Committed version ${result.version} — ${result.lineCount} vehicles live, ${result.rejectedCount} rejected.`,
+      'ok');
+  } catch (error) {
+    note($('commitMsg'), error.message, 'err');
+  }
+};
+
+/* ---------------- Reconciliations ---------------- */
+
+const severityOf = (outcome) => (outcome === 'MATCH' ? 'pass' : outcome === 'PENDING' ? 'warn' : 'block');
+
+async function loadRecons() {
+  try {
+    const filter = $('outcomeFilter').value;
+    const data = await api('GET', `/v1/reconciliations?limit=100${filter ? `&outcome=${filter}` : ''}`);
+
+    $('reconTable').innerHTML = `
+      <tr><th>Time</th><th class="mono">Container</th><th class="mono">VIN</th><th>Outcome</th><th>Reason</th><th>Detail</th></tr>
+      ${data.reconciliations.map((r) => `<tr>
+        <td>${esc(new Date(r.reconciled_at).toLocaleString())}</td>
+        <td class="mono">${esc(r.container_no)}</td>
+        <td class="mono">${esc(r.vin)}</td>
+        <td><span class="pill ${severityOf(r.outcome)}">${esc(r.outcome)}</span></td>
+        <td>${esc(r.reason_code)}</td>
+        <td style="color:var(--muted)">${esc(r.detail || '')}</td>
+      </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">Nothing yet.</td></tr>'}`;
+  } catch (error) {
+    $('reconTable').innerHTML = `<tr><td class="errlist">${esc(error.message)}</td></tr>`;
+  }
+}
+
+$('reconRefresh').onclick = loadRecons;
+$('outcomeFilter').onchange = loadRecons;
+
+/* ---------------- Notifications ---------------- */
+
+async function loadNotifications() {
+  try {
+    const data = await api('GET', '/v1/admin/notifications?limit=100');
+    $('notifTable').innerHTML = `
+      <tr><th>Queued</th><th>Event</th><th>Recipients</th><th>Subject</th><th>Status</th></tr>
+      ${data.notifications.map((n) => `<tr>
+        <td>${esc(new Date(n.queued_at).toLocaleString())}</td>
+        <td>${esc(n.event_type)}</td>
+        <td style="color:var(--muted)">${esc(n.recipients)}</td>
+        <td>${esc(n.subject)}</td>
+        <td><span class="pill ${n.status === 'sent' ? 'pass' : n.status === 'failed' ? 'block' : 'warn'}">${esc(n.status)}</span></td>
+      </tr>`).join('') || '<tr><td colspan="5" style="color:var(--muted)">Nothing yet.</td></tr>'}`;
+  } catch (error) {
+    $('notifTable').innerHTML = `<tr><td class="errlist">${esc(error.message)}</td></tr>`;
+  }
+}
+
+/* ---------------- Recipients ---------------- */
+
+$('recAdd').onclick = async () => {
+  try {
+    await api('POST', '/v1/admin/notification-recipients', {
+      eventType: $('recEvent').value,
+      email: $('recEmail').value.trim(),
+    });
+    note($('recMsg'), `Added ${$('recEmail').value.trim()} for ${$('recEvent').value}.`, 'ok');
+    $('recEmail').value = '';
+  } catch (error) {
+    note($('recMsg'), error.message, 'err');
+  }
+};
+</script>
+</body>
+</html>
