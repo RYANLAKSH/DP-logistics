@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "DP Reconcile",
+    "slug": "dp-reconcile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.dplogistics.reconcile" },
+    "android": {
+      "package": "com.dplogistics.reconcile",
+      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Scan container plates and vehicle VIN labels." }],
+      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Record where each reconciliation happened." }]
+    ]
+  }
+}
