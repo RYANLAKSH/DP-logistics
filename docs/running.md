@@ -2,7 +2,7 @@
 
 ```bash
 npm install
-npm test          # 101 tests across shared-rules, fixtures, api and mobile
+npm test          # 179 tests across shared-rules, fixtures, api and mobile
 ```
 
 ## The reconciliation demo
@@ -71,7 +71,7 @@ npx expo start
 ```
 
 **Not yet run against a device or emulator.** The code is written and the pure
-logic is tested (13 tests over OCR interpretation), but the screens have not
+logic is tested (24 tests over OCR interpretation and image hashing), but the screens have not
 been exercised on hardware — that needs an Android device or emulator, which
 this environment does not have. Expect the usual first-run friction.
 
