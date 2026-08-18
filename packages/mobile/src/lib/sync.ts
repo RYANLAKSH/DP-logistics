@@ -12,7 +12,9 @@ import {
   markFailed,
   saveReport,
   pendingCount,
+  attachUploadUrl,
 } from './store.ts';
+import { drainImageQueue } from './imageQueue.ts';
 
 export interface SyncOutcome {
   uploaded: number;
@@ -22,6 +24,12 @@ export interface SyncOutcome {
   /** Sessions where the server disagreed with the device's offline verdict. */
   disagreements: { sessionId: string; deviceOutcome?: string; serverOutcome?: string }[];
   offline: boolean;
+  images: {
+    uploaded: number;
+    pending: number;
+    /** Retries exhausted — a reconciliation with no picture behind it. */
+    permanentlyFailed: number;
+  };
 }
 
 let running = false;
@@ -40,6 +48,7 @@ export async function runSync(locationId: string | null): Promise<SyncOutcome> {
     reportRefreshed: false,
     disagreements: [],
     offline: false,
+    images: { uploaded: 0, pending: 0, permanentlyFailed: 0 },
   };
 
   // A second concurrent run would double-submit; the server is idempotent, but
@@ -67,6 +76,14 @@ export async function runSync(locationId: string | null): Promise<SyncOutcome> {
           if (server && (server.status === 'accepted' || server.status === 'duplicate')) {
             await markSynced(session.id);
             outcome.uploaded++;
+
+            // The response carries an upload URL per scan that declared an
+            // image. Record them before touching the network again.
+            for (const [scanId, upload] of Object.entries(server.uploads ?? {})) {
+              if (upload && typeof upload === 'object' && 'url' in upload) {
+                await attachUploadUrl(scanId, upload as { url: string; expiresAt: string });
+              }
+            }
 
             if (server.outcomeDiffers) {
               outcome.disagreements.push({
@@ -96,6 +113,16 @@ export async function runSync(locationId: string | null): Promise<SyncOutcome> {
         outcome.offline = outcome.offline || report.offline;
       }
     }
+
+    // Images go last and on their own budget: the verdict and its email have
+    // already been delivered by this point.
+    const images = await drainImageQueue();
+    outcome.images = {
+      uploaded: images.uploaded,
+      pending: images.pending,
+      permanentlyFailed: images.permanentlyFailed,
+    };
+    outcome.offline = outcome.offline || images.offline;
 
     outcome.stillPending = await pendingCount();
     return outcome;

@@ -24,6 +24,19 @@ import {
   revokeRefreshToken,
   ACCESS_TTL_SECONDS,
 } from './lib/auth.ts';
+import {
+  getStorage,
+  LocalStorageDriver,
+  MAX_IMAGE_BYTES,
+  ALLOWED_CONTENT_TYPES,
+} from './lib/storage.ts';
+import {
+  presignScanImage,
+  refreshScanUploadUrl,
+  finalizeScanImage,
+  evidenceForReconciliation,
+  missingEvidence,
+} from './modules/evidence.ts';
 import { previewCsv, commitReport } from './modules/ingest.ts';
 import { submitReconciliation, overrideReconciliation } from './modules/reconciliation.ts';
 
@@ -39,6 +52,19 @@ declare global {
 
 const fail = (res: Response, status: number, code: string, message: string, details?: unknown) =>
   res.status(status).json({ error: { code, message, details } });
+
+/**
+ * Forwards async handler rejections to the error middleware.
+ *
+ * Express 4 does not await route handlers, so an unhandled rejection leaves the
+ * request open until the client times out. At a gate that reads as the app
+ * hanging, which is worse than an error.
+ */
+const wrap =
+  (handler: (req: Request, res: Response) => Promise<unknown>) =>
+    (req: Request, res: Response, next: NextFunction) => {
+      handler(req, res).catch(next);
+    };
 
 export function createServer(db: Db) {
   const app = express();
@@ -242,7 +268,7 @@ export function createServer(db: Db) {
                 load_position, booking_ref, destination_port
            FROM pickup_report_lines WHERE report_id = ? ORDER BY line_no`,
       )
-      .all(report.id);
+      .all(String(report.id));
 
     const loadedVins = (
       db
@@ -250,7 +276,7 @@ export function createServer(db: Db) {
           `SELECT vin FROM reconciliations
             WHERE report_id = ? AND outcome = 'MATCH' AND supersedes_id IS NULL AND overridden = 0`,
         )
-        .all(report.id) as { vin: string }[]
+        .all(String(report.id)) as { vin: string }[]
     ).map((row) => row.vin);
 
     res.json({ report, lines, loadedVins });
@@ -261,8 +287,12 @@ export function createServer(db: Db) {
     scanType: z.enum(['container', 'vin', 'other']),
     finalValue: z.string().min(1),
     detectedValue: z.string().optional(),
-    imageKey: z.string().optional(),
-    imageSha256: z.string().optional(),
+    // The device declares WHAT it will upload; the server derives WHERE.
+    // A client-supplied key would let a compromised device overwrite another
+    // officer's evidence.
+    imageSha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    imageContentType: z.enum(['image/jpeg', 'image/png', 'image/webp']).optional(),
+    imageBytes: z.number().int().positive().max(MAX_IMAGE_BYTES).optional(),
     ocrRawText: z.string().optional(),
     ocrConfidence: z.number().min(0).max(1).optional(),
     ocrEngine: z.string().optional(),
@@ -289,7 +319,7 @@ export function createServer(db: Db) {
    * Idempotent on the client-generated session id — the device retries, and a
    * retry must not create a second reconciliation.
    */
-  app.post('/v1/sync/scans', authenticate, async (req, res) => {
+  app.post('/v1/sync/scans', authenticate, wrap(async (req, res) => {
     const parsed = z.object({ sessions: z.array(sessionSchema).max(100) }).safeParse(req.body);
     if (!parsed.success) {
       return fail(res, 400, 'INVALID_INPUT', 'Bad sync payload', parsed.error.flatten());
@@ -298,6 +328,7 @@ export function createServer(db: Db) {
     const results: unknown[] = [];
 
     for (const session of parsed.data.sessions) {
+      try {
       if (!assertLocationAccess(req.user!, session.locationId)) {
         results.push({ id: session.id, status: 'rejected', reason: 'FORBIDDEN_LOCATION' });
         continue;
@@ -329,7 +360,7 @@ export function createServer(db: Db) {
                               captured_at, created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         ).run(
-          scan.id, session.id, scan.scanType, scan.imageKey ?? null, scan.imageSha256 ?? null,
+          scan.id, session.id, scan.scanType, null, scan.imageSha256 ?? null,
           scan.ocrRawText ?? null, scan.ocrConfidence ?? null, scan.ocrEngine ?? null,
           scan.detectedValue ?? null, scan.finalValue, scan.wasManualEntry ? 1 : 0,
           scan.checkDigitOk == null ? null : scan.checkDigitOk ? 1 : 0,
@@ -359,11 +390,40 @@ export function createServer(db: Db) {
         deviceOutcome: session.deviceOutcome ?? null,
       });
 
-      results.push({ id: session.id, status: 'accepted', ...outcome });
+      // Metadata is committed and the email has fired. Only now do we hand
+      // back upload URLs, so a slow transfer delays evidence rather than the
+      // verdict.
+      const uploads: Record<string, unknown> = {};
+      for (const scan of session.scans) {
+        if (!scan.imageSha256 || !scan.imageContentType || !scan.imageBytes) continue;
+
+        const presigned = await presignScanImage(db, req.user!.orgId, {
+          scanId: scan.id,
+          sha256: scan.imageSha256,
+          contentType: scan.imageContentType,
+          bytes: scan.imageBytes,
+        });
+        uploads[scan.id] = presigned.ok
+          ? presigned.upload
+          : { error: presigned.reason };
+      }
+
+      results.push({ id: session.id, status: 'accepted', ...outcome, uploads });
+      } catch (error) {
+        // A device drains its whole queue in one call. One malformed or
+        // conflicting session must not cost the officer the other forty-nine,
+        // so failures are reported per session rather than for the batch.
+        console.error(`[${req.requestId}] session ${session.id} failed`, error);
+        results.push({
+          id: session.id,
+          status: 'failed',
+          reason: error instanceof Error ? error.message : 'unknown error',
+        });
+      }
     }
 
     res.json({ sessions: results });
-  });
+  }));
 
   /* ---------------------------------------------------------------- *
    * Reconciliations
@@ -387,7 +447,7 @@ export function createServer(db: Db) {
   app.get('/v1/reconciliations/:id', authenticate, (req, res) => {
     const row = db
       .prepare('SELECT * FROM reconciliations WHERE id = ? AND org_id = ?')
-      .get(req.params.id, req.user!.orgId);
+      .get(String(req.params.id), req.user!.orgId);
     if (!row) return fail(res, 404, 'NOT_FOUND', 'Reconciliation not found');
     res.json(row);
   });
@@ -403,7 +463,7 @@ export function createServer(db: Db) {
     notes: z.string().max(1000).optional(),
   });
 
-  app.post('/v1/reconciliations/:id/override', authenticate, require('supervisor'), async (req, res) => {
+  app.post('/v1/reconciliations/:id/override', authenticate, require('supervisor'), wrap(async (req, res) => {
     const parsed = overrideSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, 400, 'INVALID_INPUT', 'reasonCode is required');
 
@@ -415,7 +475,7 @@ export function createServer(db: Db) {
 
     const result = await overrideReconciliation(db, {
       orgId: req.user!.orgId,
-      reconciliationId: req.params.id!,
+      reconciliationId: String(req.params.id),
       supervisorId: req.user!.id,
       supervisorName: req.user!.fullName,
       reasonCode: parsed.data.reasonCode,
@@ -424,7 +484,7 @@ export function createServer(db: Db) {
 
     if (!result) return fail(res, 404, 'NOT_FOUND', 'Reconciliation not found');
     res.status(201).json(result);
-  });
+  }));
 
   /* ---------------------------------------------------------------- *
    * Admin — report ingest
@@ -539,12 +599,12 @@ export function createServer(db: Db) {
   app.post('/v1/admin/devices/:id/approve', authenticate, require('supervisor'), (req, res) => {
     const changed = db
       .prepare('UPDATE devices SET approved_at = ?, approved_by = ? WHERE id = ?')
-      .run(nowIso(), req.user!.id, req.params.id);
+      .run(nowIso(), req.user!.id, String(req.params.id));
 
     if (changed.changes === 0) return fail(res, 404, 'NOT_FOUND', 'Device not found');
     audit(db, {
       orgId: req.user!.orgId, actorId: req.user!.id, action: 'device.approve',
-      entityType: 'device', entityId: req.params.id,
+      entityType: 'device', entityId: String(req.params.id),
     });
     res.status(204).end();
   });
@@ -604,16 +664,156 @@ export function createServer(db: Db) {
       )
       .all() as { scan_type: string; correct: number; total: number }[];
 
+    // Evidence coverage: a verdict with no verified image behind it is a
+    // decision nobody can review later.
+    const evidence = db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN s.image_verified = 1 THEN 1 ELSE 0 END) AS verified
+           FROM scans s JOIN scan_sessions ss ON ss.id = s.session_id
+          WHERE ss.org_id = ?`,
+      )
+      .get(req.user!.orgId) as { total: number; verified: number | null };
+
     res.json({
       total,
       match,
       exceptions: total - match,
+      evidence: {
+        scans: evidence.total,
+        verified: evidence.verified ?? 0,
+        coverage: evidence.total ? (evidence.verified ?? 0) / evidence.total : null,
+      },
       byOutcome: Object.fromEntries(counts.map((row) => [row.outcome, row.n])),
       overrideRate: total ? overrides / total : 0,
       ocrAccuracy: Object.fromEntries(
         ocr.map((row) => [row.scan_type, row.total ? row.correct / row.total : null]),
       ),
     });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Evidence images
+   * ---------------------------------------------------------------- */
+
+  /**
+   * A fresh upload URL for an image declared earlier.
+   *
+   * The device calls this when its URL expired before it got a connection long
+   * enough to deliver the bytes.
+   */
+  app.post('/v1/scans/:scanId/image-upload-url', authenticate, wrap(async (req, res) => {
+    const result = await refreshScanUploadUrl(db, req.user!.orgId, String(req.params.scanId));
+
+    if (!result.ok) {
+      const status = result.reason === 'ALREADY_VERIFIED' ? 409 : 404;
+      return fail(res, status, result.reason, 'Cannot issue an upload URL for this scan');
+    }
+    res.json({ upload: result.upload });
+  }));
+
+  /**
+   * Confirms an upload landed intact.
+   *
+   * Called by the device after it PUTs the bytes. The server compares the
+   * stored object against the hash the device declared beforehand.
+   */
+  app.post('/v1/scans/:scanId/image-uploaded', authenticate, wrap(async (req, res) => {
+    const result = await finalizeScanImage(db, req.user!.orgId, String(req.params.scanId), req.user!.id);
+
+    switch (result.status) {
+      case 'verified':
+        return res.json({ status: 'verified', bytes: result.bytes });
+      case 'unknown_scan':
+        return fail(res, 404, 'NOT_FOUND', 'Scan not found');
+      case 'no_declaration':
+        return fail(res, 409, 'NO_DECLARATION', 'No image was declared for this scan');
+      case 'missing':
+        // Expected when the device calls too early or the PUT failed silently;
+        // it should retry the upload, not the finalize.
+        return fail(res, 409, 'OBJECT_MISSING', 'No object found at the expected key');
+      case 'hash_mismatch':
+        return fail(res, 422, 'HASH_MISMATCH',
+          'Uploaded bytes do not match the declared SHA-256', {
+            expected: result.expected, actual: result.actual,
+          });
+      case 'size_mismatch':
+        return fail(res, 422, 'SIZE_MISMATCH',
+          'Uploaded byte count does not match the declaration', {
+            expected: result.expected, actual: result.actual,
+          });
+    }
+  }));
+
+  /** Viewing links for a reconciliation's images. Every issue is logged. */
+  app.get('/v1/reconciliations/:id/evidence', authenticate, wrap(async (req, res) => {
+    const items = await evidenceForReconciliation(db, req.user!.orgId, String(req.params.id), {
+      id: req.user!.id,
+      ip: req.ip ?? null,
+    });
+    if (!items) return fail(res, 404, 'NOT_FOUND', 'Reconciliation not found');
+    res.json({ evidence: items });
+  }));
+
+  /** Decisions with no verified picture behind them. */
+  app.get('/v1/admin/evidence/missing', authenticate, require('supervisor'), (req, res) => {
+    res.json({ scans: missingEvidence(db, req.user!.orgId, Math.min(Number(req.query.limit ?? 100), 500)) });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Local object store
+   * ---------------------------------------------------------------- */
+
+  /*
+   * These two routes exist only for the local storage driver — with S3 the
+   * device talks to the bucket directly and these are never hit.
+   *
+   * Deliberately unauthenticated: the signed token IS the authorisation, which
+   * is the same trust model as an S3 presigned URL. It names one key, permits
+   * one operation, and expires.
+   */
+  app.put('/v1/storage/:token',
+    express.raw({ type: '*/*', limit: MAX_IMAGE_BYTES }),
+    (req, res) => {
+      const storage = getStorage();
+      if (!(storage instanceof LocalStorageDriver)) {
+        return fail(res, 404, 'NOT_FOUND', 'Local storage is not in use');
+      }
+
+      const capability = storage.verify(String(req.params.token));
+      if (!capability || capability.o !== 'put') {
+        return fail(res, 403, 'INVALID_CAPABILITY', 'Upload URL is invalid or expired');
+      }
+
+      const body = req.body as Buffer;
+      if (!Buffer.isBuffer(body) || body.length === 0) {
+        return fail(res, 400, 'EMPTY_BODY', 'No bytes received');
+      }
+      if (capability.c && !ALLOWED_CONTENT_TYPES.has(capability.c)) {
+        return fail(res, 400, 'UNSUPPORTED_CONTENT_TYPE', 'Content type not allowed');
+      }
+
+      storage.write(capability.k, body);
+      res.status(201).json({ bytes: body.length });
+    });
+
+  app.get('/v1/storage/:token', (req, res) => {
+    const storage = getStorage();
+    if (!(storage instanceof LocalStorageDriver)) {
+      return fail(res, 404, 'NOT_FOUND', 'Local storage is not in use');
+    }
+
+    const capability = storage.verify(String(req.params.token));
+    if (!capability || capability.o !== 'get') {
+      return fail(res, 403, 'INVALID_CAPABILITY', 'Link is invalid or expired');
+    }
+
+    const bytes = storage.read(capability.k);
+    if (!bytes) return fail(res, 404, 'NOT_FOUND', 'Object not found');
+
+    res.setHeader('content-type', capability.c ?? 'application/octet-stream');
+    res.setHeader('cache-control', 'private, max-age=300');
+    res.send(bytes);
   });
 
   app.get('/v1/health', (_req, res) => res.json({ status: 'ok', time: nowIso() }));

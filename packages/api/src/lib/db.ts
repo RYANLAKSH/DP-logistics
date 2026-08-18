@@ -129,6 +129,12 @@ CREATE TABLE IF NOT EXISTS scans (
   scan_type         TEXT NOT NULL CHECK (scan_type IN ('container','vin','other')),
   image_key         TEXT,
   image_sha256      TEXT,
+  image_content_type TEXT,
+  image_bytes       INTEGER,
+  image_uploaded_at TEXT,
+  /* 0 = declared but unverified, 1 = bytes on disk match the declared hash.
+     Only a verified image is defensible evidence. */
+  image_verified    INTEGER NOT NULL DEFAULT 0,
   ocr_raw_text      TEXT,
   ocr_confidence    REAL,
   ocr_engine        TEXT,
@@ -211,6 +217,24 @@ CREATE TABLE IF NOT EXISTS notifications (
   sent_at           TEXT
 );
 
+/*
+ * Who looked at which evidence image, and when. Separate from audit_log
+ * because reads are high-volume and the retention question differs: the audit
+ * log is kept for years, access records for months.
+ */
+CREATE TABLE IF NOT EXISTS evidence_access_log (
+  id                TEXT PRIMARY KEY,
+  org_id            TEXT NOT NULL,
+  actor_id          TEXT REFERENCES users(id),
+  scan_id           TEXT REFERENCES scans(id),
+  reconciliation_id TEXT REFERENCES reconciliations(id),
+  action            TEXT NOT NULL,
+  ip                TEXT,
+  created_at        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_access_scan ON evidence_access_log (scan_id);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id          TEXT PRIMARY KEY,
   org_id      TEXT NOT NULL,
@@ -225,10 +249,34 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 `;
 
+/**
+ * Columns added after the first release.
+ *
+ * CREATE TABLE IF NOT EXISTS silently does nothing for a database that already
+ * has the table, so new columns need an explicit ALTER. Checked against
+ * table_info so it is safe to run on every boot.
+ */
+const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
+  ['scans', 'image_content_type', 'TEXT'],
+  ['scans', 'image_bytes', 'INTEGER'],
+  ['scans', 'image_uploaded_at', 'TEXT'],
+  ['scans', 'image_verified', 'INTEGER NOT NULL DEFAULT 0'],
+];
+
+export function migrate(db: Db): void {
+  for (const [table, column, definition] of ADDED_COLUMNS) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (columns.length === 0) continue; // table absent entirely
+    if (columns.some((existing) => existing.name === column)) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export function openDb(path = ':memory:'): Db {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

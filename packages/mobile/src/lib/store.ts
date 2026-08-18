@@ -70,6 +70,27 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
 
         CREATE INDEX IF NOT EXISTS idx_queue_pending
           ON queued_sessions (synced_at) WHERE synced_at IS NULL;
+
+        /* Evidence images, queued separately from the session that described
+           them. Metadata must reach the server first — it carries the verdict
+           and triggers the email — so bytes follow on their own schedule and a
+           stalled image never holds up a reconciliation. */
+        CREATE TABLE IF NOT EXISTS queued_images (
+          scan_id        TEXT PRIMARY KEY,
+          session_id     TEXT NOT NULL,
+          local_uri      TEXT NOT NULL,
+          sha256         TEXT NOT NULL,
+          bytes          INTEGER NOT NULL,
+          content_type   TEXT NOT NULL,
+          upload_url     TEXT,
+          url_expires_at TEXT,
+          state          TEXT NOT NULL DEFAULT 'awaiting_url',
+          attempts       INTEGER NOT NULL DEFAULT 0,
+          last_error     TEXT,
+          created_at     TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_images_state ON queued_images (state);
       `);
       return db;
     });
@@ -258,4 +279,132 @@ export async function pendingCount(): Promise<number> {
     'SELECT COUNT(*) AS n FROM queued_sessions WHERE synced_at IS NULL',
   );
   return row?.n ?? 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Evidence image queue
+ * ------------------------------------------------------------------ */
+
+/**
+ * awaiting_url — declared locally, no upload URL yet (session not synced)
+ * ready       — has a URL, bytes not delivered
+ * verified    — the server confirmed the hash; local file can go
+ * failed      — retries exhausted; needs a human to look
+ */
+export type ImageState = 'awaiting_url' | 'ready' | 'verified' | 'failed';
+
+/** Retries before giving up. Beyond this it is not a transient fault. */
+export const MAX_IMAGE_ATTEMPTS = 6;
+
+export interface QueuedImage {
+  scanId: string;
+  sessionId: string;
+  localUri: string;
+  sha256: string;
+  bytes: number;
+  contentType: string;
+  uploadUrl: string | null;
+  urlExpiresAt: string | null;
+  state: ImageState;
+  attempts: number;
+}
+
+export async function enqueueImage(image: {
+  scanId: string;
+  sessionId: string;
+  localUri: string;
+  sha256: string;
+  bytes: number;
+  contentType: string;
+}): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO queued_images
+       (scan_id, session_id, local_uri, sha256, bytes, content_type, state, created_at)
+     VALUES (?,?,?,?,?,?,'awaiting_url',?)`,
+    [image.scanId, image.sessionId, image.localUri, image.sha256, image.bytes,
+     image.contentType, new Date().toISOString()],
+  );
+}
+
+/** Records the URL the server handed back with the session response. */
+export async function attachUploadUrl(
+  scanId: string,
+  upload: { url: string; expiresAt: string },
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE queued_images
+        SET upload_url = ?, url_expires_at = ?, state = 'ready'
+      WHERE scan_id = ? AND state <> 'verified'`,
+    [upload.url, upload.expiresAt, scanId],
+  );
+}
+
+const toQueuedImage = (row: Record<string, unknown>): QueuedImage => ({
+  scanId: String(row.scan_id),
+  sessionId: String(row.session_id),
+  localUri: String(row.local_uri),
+  sha256: String(row.sha256),
+  bytes: Number(row.bytes),
+  contentType: String(row.content_type),
+  uploadUrl: (row.upload_url as string) ?? null,
+  urlExpiresAt: (row.url_expires_at as string) ?? null,
+  state: String(row.state) as ImageState,
+  attempts: Number(row.attempts),
+});
+
+/** Images still owed to the server, oldest first. */
+export async function getPendingImages(limit = 20): Promise<QueuedImage[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM queued_images
+      WHERE state IN ('awaiting_url','ready') AND attempts < ?
+      ORDER BY created_at LIMIT ?`,
+    [MAX_IMAGE_ATTEMPTS, limit],
+  );
+  return rows.map(toQueuedImage);
+}
+
+export async function markImageVerified(scanId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE queued_images SET state = 'verified' WHERE scan_id = ?`, [scanId]);
+}
+
+export async function markImageAttemptFailed(scanId: string, error: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE queued_images
+        SET attempts = attempts + 1,
+            last_error = ?,
+            state = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE state END
+      WHERE scan_id = ?`,
+    [error.slice(0, 500), MAX_IMAGE_ATTEMPTS, scanId],
+  );
+}
+
+/** Forces a fresh URL to be requested on the next drain. */
+export async function invalidateUploadUrl(scanId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE queued_images SET upload_url = NULL, url_expires_at = NULL, state = 'awaiting_url'
+      WHERE scan_id = ? AND state <> 'verified'`,
+    [scanId],
+  );
+}
+
+export interface ImageQueueStats {
+  pending: number;
+  failed: number;
+}
+
+export async function imageQueueStats(): Promise<ImageQueueStats> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ pending: number; failed: number }>(
+    `SELECT
+       SUM(CASE WHEN state IN ('awaiting_url','ready') THEN 1 ELSE 0 END) AS pending,
+       SUM(CASE WHEN state = 'failed' THEN 1 ELSE 0 END) AS failed
+     FROM queued_images`,
+  );
+  return { pending: row?.pending ?? 0, failed: row?.failed ?? 0 };
 }

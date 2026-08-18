@@ -14,7 +14,9 @@ import { reconcile, type ReconResult } from '@dp/shared-rules';
 import type { CaptureResult } from '../screens/ScanScreen.tsx';
 import {
   getCachedLines, getCachedReport, getLoadedVins, markLoadedLocally, enqueueSession,
+  enqueueImage,
 } from './store.ts';
+import { prepareEvidenceImage, type PreparedImage } from './images.ts';
 
 /** RFC 4122 v4 without pulling in a dependency. */
 function uuid(): string {
@@ -51,6 +53,8 @@ export interface CommitOutcome {
   sessionId: string;
   /** False when there was no cached report to judge against. */
   hadReport: boolean;
+  /** How many of the two images were captured and queued for upload. */
+  imagesQueued: number;
 }
 
 export async function commitCapture(args: {
@@ -77,7 +81,33 @@ export async function commitCapture(args: {
   const sessionId = uuid();
   const now = new Date().toISOString();
 
-  const scanFor = (capture: CaptureResult, scanType: 'container' | 'vin') => ({
+  /**
+   * Compress and hash before declaring.
+   *
+   * A failure here must not lose the reconciliation — the verdict is the thing
+   * that stops a wrong car being loaded, and it is already computed. So a
+   * broken image degrades to a scan with no evidence, which is visible in the
+   * coverage metric, rather than a lost verdict.
+   */
+  const prepare = async (capture: CaptureResult): Promise<PreparedImage | null> => {
+    if (!capture.imageUri) return null;
+    try {
+      return await prepareEvidenceImage(capture.imageUri);
+    } catch {
+      return null;
+    }
+  };
+
+  const [containerImage, vinImage] = await Promise.all([
+    prepare(args.container),
+    prepare(args.vin),
+  ]);
+
+  const scanFor = (
+    capture: CaptureResult,
+    scanType: 'container' | 'vin',
+    image: PreparedImage | null,
+  ) => ({
     id: uuid(),
     scanType,
     finalValue: capture.value,
@@ -87,14 +117,34 @@ export async function commitCapture(args: {
     ocrEngine: capture.ocr ? 'mlkit-v2' : undefined,
     wasManualEntry: capture.wasManualEntry,
     checkDigitOk: capture.checkDigitOk ?? undefined,
-    // The image itself uploads separately via a presigned URL; the record
-    // carries the local reference until that completes.
-    imageKey: capture.imageUri ?? undefined,
+    // Declare WHAT will be uploaded. The server derives the destination and
+    // later checks the bytes that arrive against this hash.
+    imageSha256: image?.sha256,
+    imageContentType: image?.contentType,
+    imageBytes: image?.bytes,
     gpsLat: position.lat,
     gpsLng: position.lng,
     gpsAccuracyM: position.accuracy,
     capturedAt: now,
   });
+
+  const containerScan = scanFor(args.container, 'container', containerImage);
+  const vinScan = scanFor(args.vin, 'vin', vinImage);
+
+  for (const [scan, image] of [
+    [containerScan, containerImage],
+    [vinScan, vinImage],
+  ] as const) {
+    if (!image) continue;
+    await enqueueImage({
+      scanId: scan.id,
+      sessionId,
+      localUri: image.uri,
+      sha256: image.sha256,
+      bytes: image.bytes,
+      contentType: image.contentType,
+    });
+  }
 
   await enqueueSession({
     id: sessionId,
@@ -107,7 +157,7 @@ export async function commitCapture(args: {
       startedAt: now,
       appVersion: args.appVersion,
       deviceOutcome: result.outcome,
-      scans: [scanFor(args.container, 'container'), scanFor(args.vin, 'vin')],
+      scans: [containerScan, vinScan],
     },
   });
 
@@ -117,5 +167,10 @@ export async function commitCapture(args: {
     await markLoadedLocally(result.matchedLine.vin);
   }
 
-  return { result, sessionId, hadReport: Boolean(report) };
+  return {
+    result,
+    sessionId,
+    hadReport: Boolean(report),
+    imagesQueued: [containerImage, vinImage].filter(Boolean).length,
+  };
 }

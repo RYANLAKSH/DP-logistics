@@ -7,6 +7,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
 
 const ACCESS_KEY = 'dp.accessToken';
 const REFRESH_KEY = 'dp.refreshToken';
@@ -149,8 +150,69 @@ export interface SyncScansResponse {
     detail?: string;
     outcomeDiffers?: boolean;
     containerComplete?: boolean;
+    /** Upload URL per scan that declared an image, keyed by scan id. */
+    uploads?: Record<string, { url: string; method: string; headers: Record<string, string>; expiresAt: string } | { error: string }>;
   }[];
 }
 
 export const uploadSessions = (sessions: unknown[]) =>
   call<SyncScansResponse>('POST', '/v1/sync/scans', { sessions });
+
+/* ------------------------------------------------------------------ *
+ * Evidence images
+ * ------------------------------------------------------------------ */
+
+export interface PresignedUpload {
+  url: string;
+  method: 'PUT';
+  headers: Record<string, string>;
+  expiresAt: string;
+}
+
+/** A replacement URL for an image whose original expired before we had signal. */
+export const refreshUploadUrl = (scanId: string) =>
+  call<{ upload: PresignedUpload }>('POST', `/v1/scans/${scanId}/image-upload-url`, {});
+
+/** Asks the server to compare what landed against the hash we declared. */
+export const finalizeImage = (scanId: string) =>
+  call<{ status: string; bytes: number }>('POST', `/v1/scans/${scanId}/image-uploaded`, {});
+
+/**
+ * Streams a local file to a capability URL.
+ *
+ * Uses expo-file-system rather than fetch with a body: uploadAsync streams from
+ * disk, where reading the file into memory first would spike usage by the size
+ * of the image on a device that is already short on it.
+ *
+ * No auth header — the signed URL IS the authorisation.
+ */
+export async function uploadImageBytes(
+  upload: PresignedUpload,
+  localUri: string,
+): Promise<ApiResult<{ bytes: number }>> {
+  try {
+    const result = await FileSystem.uploadAsync(upload.url, localUri, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: upload.headers,
+    });
+
+    if (result.status >= 200 && result.status < 300) {
+      const body = result.body ? JSON.parse(result.body) : {};
+      return { ok: true, data: { bytes: Number(body.bytes ?? 0) } };
+    }
+
+    return {
+      ok: false,
+      offline: false,
+      status: result.status,
+      message: `Upload rejected (${result.status})`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      offline: true,
+      message: error instanceof Error ? error.message : 'Upload failed',
+    };
+  }
+}

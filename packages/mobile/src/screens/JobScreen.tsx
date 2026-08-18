@@ -15,7 +15,10 @@ import {
 import type { PickupReportLine } from '@dp/shared-rules';
 
 import { theme } from '../components/theme.ts';
-import { getCachedReport, getCachedLines, getLoadedVins, pendingCount, type CachedReport } from '../lib/store.ts';
+import {
+  getCachedReport, getCachedLines, getLoadedVins, pendingCount, imageQueueStats,
+  type CachedReport,
+} from '../lib/store.ts';
 import { runSync } from '../lib/sync.ts';
 
 interface Props {
@@ -39,14 +42,16 @@ export function JobScreen({ locationId, locationName, officerName, onStartScan, 
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
   const [disagreements, setDisagreements] = useState(0);
+  const [images, setImages] = useState({ pending: 0, failed: 0 });
 
   const load = useCallback(async () => {
-    const [cached, lines, loaded, queued] = await Promise.all([
-      getCachedReport(), getCachedLines(), getLoadedVins(), pendingCount(),
+    const [cached, lines, loaded, queued, imageStats] = await Promise.all([
+      getCachedReport(), getCachedLines(), getLoadedVins(), pendingCount(), imageQueueStats(),
     ]);
 
     setReport(cached);
     setPending(queued);
+    setImages(imageStats);
     setContainers(summarize(lines, loaded));
   }, []);
 
@@ -143,6 +148,22 @@ export function JobScreen({ locationId, locationName, officerName, onStartScan, 
           <Text style={styles.pending}>
             {pending} {pending === 1 ? 'result' : 'results'} waiting to upload
           </Text>
+        )}
+
+        {images.pending > 0 && (
+          <Text style={styles.pending}>
+            {images.pending} {images.pending === 1 ? 'photo' : 'photos'} waiting to upload
+          </Text>
+        )}
+
+        {images.failed > 0 && (
+          <View style={[styles.banner, styles.bannerAlert]}>
+            <Text style={styles.bannerText}>
+              {images.failed} {images.failed === 1 ? 'photo could' : 'photos could'} not be
+              uploaded after repeated attempts. Those reconciliations have no picture behind
+              them — tell your supervisor.
+            </Text>
+          </View>
         )}
       </ScrollView>
 
