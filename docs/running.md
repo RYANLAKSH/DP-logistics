@@ -2,7 +2,7 @@
 
 ```bash
 npm install
-npm test          # 179 tests across shared-rules, fixtures, api and mobile
+npm test          # 202 tests across shared-rules, fixtures, api and mobile
 ```
 
 ## The reconciliation demo
@@ -147,11 +147,24 @@ npm i @aws-sdk/client-s3 @aws-sdk/s3-request-presigner -w @dp/api
 Read [security.md](security.md) before the first real image lands — Object Lock
 in particular cannot be retrofitted onto an existing bucket.
 
+**Text recognition for scanned documents** is off unless configured, because it
+bills per page:
+
+```bash
+OCR_PROVIDER=textract            # needs S3_BUCKET; Textract reads from the bucket
+npm i @aws-sdk/client-textract -w @dp/api
+```
+
+Without it, documents upload and verify normally and are linked by hand. The
+admin panel's **Run recognition queue now** button drains the queue on demand
+rather than waiting for the 30-second worker interval.
+
 ## What is not built yet
 
-- **The S3 driver has not been run against a real bucket.** No credentials in
-  this environment. The local driver mirrors its semantics and is what the tests
-  cover.
+- **The S3 and Textract providers have not been run against real AWS.** No
+  credentials in this environment. The local storage driver and the fixture OCR
+  provider mirror their semantics and are what the tests cover; budget a day to
+  shake out each real integration.
 - **PDF report ingest.** CSV and XLSX-as-CSV work; PDF table extraction is phase 3.
 - **BullMQ/Redis.** Email sends inline after commit rather than through a queue.
   Fine at pilot volume, needs the queue before scale.

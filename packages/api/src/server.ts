@@ -49,6 +49,13 @@ import {
   DOC_TYPES,
   MAX_DOCUMENT_BYTES,
 } from './modules/documents.ts';
+import { isRecognisable } from './modules/ocr.ts';
+import {
+  runOcrWorker,
+  requeueOcr,
+  latestOcrJob,
+  listOcrJobs,
+} from './modules/ocrWorker.ts';
 import { previewCsv, commitReport } from './modules/ingest.ts';
 import { submitReconciliation, overrideReconciliation } from './modules/reconciliation.ts';
 
@@ -80,6 +87,72 @@ const wrap =
 
 export function createServer(db: Db) {
   const app = express();
+
+  /* ---------------------------------------------------------------- *
+   * Local object store
+   *
+   * Registered BEFORE the global body parsers, deliberately. Express applies
+   * middleware in order, and the global text parser for text/csv would
+   * otherwise consume a CSV document upload as a string — leaving the raw
+   * parser nothing to read and failing every spreadsheet upload.
+   * ---------------------------------------------------------------- */
+
+  /*
+   * These two routes exist only for the local storage driver — with S3 the
+   * device talks to the bucket directly and these are never hit.
+   *
+   * Deliberately unauthenticated: the signed token IS the authorisation, which
+   * is the same trust model as an S3 presigned URL. It names one key, permits
+   * one operation, and expires.
+   */
+  app.put('/v1/storage/:token',
+    // Serves both evidence photos and trade documents, so the transport limit is
+    // the larger of the two. The per-declaration ceilings are enforced when the
+    // capability is issued, which is where the two differ.
+    express.raw({ type: '*/*', limit: MAX_DOCUMENT_BYTES }),
+    (req, res) => {
+      const storage = getStorage();
+      if (!(storage instanceof LocalStorageDriver)) {
+        return fail(res, 404, 'NOT_FOUND', 'Local storage is not in use');
+      }
+
+      const capability = storage.verify(String(req.params.token));
+      if (!capability || capability.o !== 'put') {
+        return fail(res, 403, 'INVALID_CAPABILITY', 'Upload URL is invalid or expired');
+      }
+
+      const body = req.body as Buffer;
+      if (!Buffer.isBuffer(body) || body.length === 0) {
+        return fail(res, 400, 'EMPTY_BODY', 'No bytes received');
+      }
+      if (capability.c && !isAllowedContentType(capability.c)) {
+        return fail(res, 400, 'UNSUPPORTED_CONTENT_TYPE', 'Content type not allowed');
+      }
+
+      storage.write(capability.k, body);
+      res.status(201).json({ bytes: body.length });
+    });
+
+  app.get('/v1/storage/:token', (req, res) => {
+    const storage = getStorage();
+    if (!(storage instanceof LocalStorageDriver)) {
+      return fail(res, 404, 'NOT_FOUND', 'Local storage is not in use');
+    }
+
+    const capability = storage.verify(String(req.params.token));
+    if (!capability || capability.o !== 'get') {
+      return fail(res, 403, 'INVALID_CAPABILITY', 'Link is invalid or expired');
+    }
+
+    const bytes = storage.read(capability.k);
+    if (!bytes) return fail(res, 404, 'NOT_FOUND', 'Object not found');
+
+    res.setHeader('content-type', capability.c ?? 'application/octet-stream');
+    res.setHeader('cache-control', 'private, max-age=300');
+    res.send(bytes);
+  });
+
+
   app.use(express.json({ limit: '2mb' }));
   app.use(express.text({ type: 'text/csv', limit: '10mb' }));
 
@@ -811,7 +884,12 @@ export function createServer(db: Db) {
 
     switch (result.status) {
       case 'verified':
-        return res.json({ status: 'verified', bytes: result.bytes });
+        return res.json({
+          status: 'verified',
+          bytes: result.bytes,
+          ocrQueued: result.ocrQueued ?? false,
+          ocrSkipReason: result.ocrSkipReason,
+        });
       case 'unknown_document':
         return fail(res, 404, 'NOT_FOUND', 'Document not found');
       case 'missing':
@@ -884,6 +962,47 @@ export function createServer(db: Db) {
   });
 
   /* ---------------------------------------------------------------- *
+   * Text recognition
+   * ---------------------------------------------------------------- */
+
+  /** Recognition state for one document, including what its text linked to. */
+  app.get('/v1/documents/:id/ocr', authenticate, (req, res) => {
+    const job = latestOcrJob(db, req.user!.orgId, String(req.params.id));
+    if (!job) return fail(res, 404, 'NOT_FOUND', 'No recognition attempted for this document');
+    res.json(job);
+  });
+
+  /**
+   * Forces a fresh recognition pass.
+   *
+   * Useful after switching provider, or when a first pass produced nothing
+   * usable from a poor scan that has since been re-photographed.
+   */
+  app.post('/v1/documents/:id/ocr', authenticate, require('supervisor'), (req, res) => {
+    const result = requeueOcr(db, req.user!.orgId, String(req.params.id));
+    if (!result.queued) return fail(res, 409, result.reason ?? 'CANNOT_QUEUE', 'Cannot queue recognition');
+    res.status(202).json({ queued: true });
+  });
+
+  /**
+   * Runs the queue now instead of waiting for the interval.
+   *
+   * Exists because "upload a document and see it link" should not require a
+   * 30-second wait in a demo or a test.
+   */
+  app.post('/v1/admin/ocr/run', authenticate, require('supervisor'), wrap(async (req, res) => {
+    res.json(await runOcrWorker(db, { limit: Math.min(Number(req.body?.limit ?? 10), 50) }));
+  }));
+
+  app.get('/v1/admin/ocr-jobs', authenticate, require('supervisor'), (req, res) => {
+    res.json({
+      jobs: listOcrJobs(db, req.user!.orgId, Number(req.query.limit ?? 50)),
+      recognisableTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/tiff']
+        .filter(isRecognisable),
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
    * Container dossier
    * ---------------------------------------------------------------- */
 
@@ -922,65 +1041,6 @@ export function createServer(db: Db) {
         .prepare('SELECT * FROM document_requirements WHERE org_id = ? ORDER BY doc_type')
         .all(req.user!.orgId),
     });
-  });
-
-  /* ---------------------------------------------------------------- *
-   * Local object store
-   * ---------------------------------------------------------------- */
-
-  /*
-   * These two routes exist only for the local storage driver — with S3 the
-   * device talks to the bucket directly and these are never hit.
-   *
-   * Deliberately unauthenticated: the signed token IS the authorisation, which
-   * is the same trust model as an S3 presigned URL. It names one key, permits
-   * one operation, and expires.
-   */
-  app.put('/v1/storage/:token',
-    // Serves both evidence photos and trade documents, so the transport limit is
-    // the larger of the two. The per-declaration ceilings are enforced when the
-    // capability is issued, which is where the two differ.
-    express.raw({ type: '*/*', limit: MAX_DOCUMENT_BYTES }),
-    (req, res) => {
-      const storage = getStorage();
-      if (!(storage instanceof LocalStorageDriver)) {
-        return fail(res, 404, 'NOT_FOUND', 'Local storage is not in use');
-      }
-
-      const capability = storage.verify(String(req.params.token));
-      if (!capability || capability.o !== 'put') {
-        return fail(res, 403, 'INVALID_CAPABILITY', 'Upload URL is invalid or expired');
-      }
-
-      const body = req.body as Buffer;
-      if (!Buffer.isBuffer(body) || body.length === 0) {
-        return fail(res, 400, 'EMPTY_BODY', 'No bytes received');
-      }
-      if (capability.c && !isAllowedContentType(capability.c)) {
-        return fail(res, 400, 'UNSUPPORTED_CONTENT_TYPE', 'Content type not allowed');
-      }
-
-      storage.write(capability.k, body);
-      res.status(201).json({ bytes: body.length });
-    });
-
-  app.get('/v1/storage/:token', (req, res) => {
-    const storage = getStorage();
-    if (!(storage instanceof LocalStorageDriver)) {
-      return fail(res, 404, 'NOT_FOUND', 'Local storage is not in use');
-    }
-
-    const capability = storage.verify(String(req.params.token));
-    if (!capability || capability.o !== 'get') {
-      return fail(res, 403, 'INVALID_CAPABILITY', 'Link is invalid or expired');
-    }
-
-    const bytes = storage.read(capability.k);
-    if (!bytes) return fail(res, 404, 'NOT_FOUND', 'Object not found');
-
-    res.setHeader('content-type', capability.c ?? 'application/octet-stream');
-    res.setHeader('cache-control', 'private, max-age=300');
-    res.send(bytes);
   });
 
   app.get('/v1/health', (_req, res) => res.json({ status: 'ok', time: nowIso() }));

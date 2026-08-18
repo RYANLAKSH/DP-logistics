@@ -69,16 +69,73 @@ Common — the DO and invoice turn up days before the pickup list. At upload tim
 there is nothing to link to, so the extracted text is stored and
 `POST /v1/documents/:id/relink` re-runs extraction once the report lands.
 
-### A note on text extraction
+### Text recognition
 
-Auto-linking needs text. Where it comes from today:
+Auto-linking needs text. Where it comes from:
 
-- **CSV / spreadsheets** — the file is text
-- **PDFs with a text layer** — the admin pastes it, or the client extracts it
-- **Scanned images and image-only PDFs** — nothing automatic; link manually
+| Source | How |
+|---|---|
+| CSV / spreadsheets | The file *is* text |
+| PDFs with a text layer | Pasted by the admin, or extracted client-side |
+| **Scanned images, image-only PDFs** | **OCR — see below** |
 
-Server-side OCR (Textract) for scanned documents is the obvious next step and
-would remove the manual case entirely. Not built.
+A CHA sending a photographed shipping bill sends no text at all, which is the
+common case and the one that would otherwise force manual filing.
+
+**Provider is pluggable and off by default**, because recognition bills per page:
+
+```bash
+OCR_PROVIDER=textract          # requires S3_BUCKET — Textract reads from the bucket
+TEXTRACT_REGION=ap-south-1
+npm i @aws-sdk/client-textract -w @dp/api
+```
+
+With nothing configured, `NoopOcrProvider` runs: documents still upload, verify
+and link manually. Nothing breaks, nothing is billed.
+
+Textract has two paths and the code uses both:
+
+- single-page images → `DetectDocumentText`, synchronous
+- PDFs → `StartDocumentTextDetection`, asynchronous — returns a job id to poll
+
+Recognition is queued, never inline. A document verifies, its email-path work
+finishes, and the job runs behind it:
+
+```
+document verified
+      │
+      └─► ocr_jobs row (queued)
+                │
+          worker claims it ──► provider
+                │                 │
+                │           'pending' → poll next pass
+                │                 │
+                └──── text ◄───────┘
+                        │
+                        ├─► stored on the document
+                        └─► autoLinkFromText() — same extractors as the camera
+```
+
+**Cost controls are part of the design**, not an afterthought:
+
+| Guard | Why |
+|---|---|
+| Skip when text already exists | Never pay to produce what we have |
+| Reuse text for a byte-identical file | The same invoice gets uploaded twice; the hash makes identity exact |
+| Cap at 30 pages | A 400-page scan is a mistake, not a document |
+| 3 retries, then abandon | Recognition failures are rarely transient |
+| 60-poll ceiling on async jobs | A job stuck IN_PROGRESS would otherwise be polled forever |
+
+Recognition is only attempted on **verified** documents. Extracting identifiers
+from a file that failed hash verification — and then linking on them — would be
+linking on something that may not be the document it claims to be.
+
+A blank result is recorded as `done` with `NO_TEXT_FOUND`, not as a failure: the
+operational response is "link this one by hand", not "debug the pipeline".
+
+The worker runs in-process on a 30-second interval. That is a deliberate
+simplification at pilot volume, and the queue lives in the database, so moving
+to a dedicated worker later means pointing another process at the same table.
 
 ## The container dossier
 
@@ -127,6 +184,11 @@ exposure outlives the shipment.
 ## API
 
 ```
+GET  /v1/documents/:id/ocr               recognition state + what it linked
+POST /v1/documents/:id/ocr               force a fresh pass
+POST /v1/admin/ocr/run                   drain the queue now
+GET  /v1/admin/ocr-jobs                  queue and history
+
 POST /v1/documents                       declare → returns an upload URL
 POST /v1/documents/:id/uploaded          verify what landed
 GET  /v1/documents                       list, filter by type or reference
@@ -146,7 +208,9 @@ them.
 ## In the admin panel
 
 **Documents** tab: pick a type, choose a file, optionally paste text for
-auto-linking, upload. The browser hashes the file with SubtleCrypto before
+auto-linking, upload. Each row shows its recognition state and what its text
+linked to, with a **Re-read** button per document and **Run recognition queue
+now** for the whole queue. The browser hashes the file with SubtleCrypto before
 declaring it, so the same verification applies to admin uploads as to phone
 photographs.
 
@@ -154,7 +218,14 @@ photographs.
 
 ## What is not built
 
-- server-side OCR for scanned documents
+- **The Textract provider has not been run against real AWS.** No credentials
+  here. `FixtureOcrProvider` covers the pipeline — queueing, the async poll path,
+  cost guards, reuse, retries, linking — and the Textract class covers the API
+  surface. Budget a day to shake out the real integration.
+- **No table-structure awareness.** Textract's `AnalyzeDocument` returns table
+  cells; we use plain `DetectDocumentText` and rely on the extractors. That works
+  because container numbers and VINs are self-validating, but a pickup list could
+  be parsed into rows properly rather than treated as loose text.
 - email-inbox ingest (a mailbox that pulls DO attachments in automatically)
 - document versioning UI — the schema supports `supersedes_id`, nothing sets it
 - virus and content scanning

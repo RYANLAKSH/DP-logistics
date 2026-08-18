@@ -247,6 +247,9 @@ CREATE TABLE IF NOT EXISTS documents (
 
   /* Text pulled out of the document, used for auto-linking and search. */
   extracted_text    TEXT,
+  /* Mirrors the latest ocr_jobs row so listing documents does not need a join.
+     NULL means no recognition was ever attempted. */
+  ocr_state         TEXT,
 
   status            TEXT NOT NULL DEFAULT 'active'
                       CHECK (status IN ('active','superseded','void')),
@@ -303,6 +306,43 @@ CREATE TABLE IF NOT EXISTS document_requirements (
 );
 
 /*
+ * Text recognition jobs for scanned documents.
+ *
+ * A separate table rather than columns on documents because OCR is genuinely
+ * asynchronous — Textract's multi-page path returns a job id and you poll it —
+ * and because it is billed per page, so the attempt history is a cost record as
+ * well as a status.
+ */
+CREATE TABLE IF NOT EXISTS ocr_jobs (
+  id                TEXT PRIMARY KEY,
+  org_id            TEXT NOT NULL REFERENCES organizations(id),
+  document_id       TEXT NOT NULL REFERENCES documents(id),
+  provider          TEXT NOT NULL,
+  state             TEXT NOT NULL CHECK (state IN
+                      ('queued','running','pending_provider','done','failed','skipped')),
+  /* Provider-side job handle, for the async multi-page path. */
+  provider_job_ref  TEXT,
+  pages             INTEGER,
+  attempts          INTEGER NOT NULL DEFAULT 0,
+  error             TEXT,
+  /* What the extracted text linked to, as JSON arrays. Kept on the job so a
+     re-run can be compared against what the previous pass concluded. */
+  linked_containers TEXT,
+  linked_vins       TEXT,
+  unmatched         TEXT,
+  /* Set when the text was copied from an identical file already recognised —
+     the same document gets uploaded more than once, and paying Textract twice
+     for identical bytes is waste. */
+  reused_from_id    TEXT REFERENCES documents(id),
+  queued_at         TEXT NOT NULL,
+  started_at        TEXT,
+  finished_at       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ocr_state ON ocr_jobs (state);
+CREATE INDEX IF NOT EXISTS idx_ocr_document ON ocr_jobs (document_id);
+
+/*
  * Who looked at which evidence image, and when. Separate from audit_log
  * because reads are high-volume and the retention question differs: the audit
  * log is kept for years, access records for months.
@@ -344,6 +384,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
  */
 const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ['evidence_access_log', 'document_id', 'TEXT'],
+  ['documents', 'ocr_state', 'TEXT'],
   ['scans', 'image_content_type', 'TEXT'],
   ['scans', 'image_bytes', 'INTEGER'],
   ['scans', 'image_uploaded_at', 'TEXT'],

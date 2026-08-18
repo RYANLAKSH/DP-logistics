@@ -25,6 +25,7 @@ import {
 } from '@dp/shared-rules';
 
 import { type Db, newId, nowIso, audit } from '../lib/db.ts';
+import { enqueueOcr } from './ocr.ts';
 import {
   getStorage,
   documentKey,
@@ -246,7 +247,13 @@ export function autoLinkFromText(
 }
 
 export type DocumentFinalizeResult =
-  | { status: 'verified'; bytes: number; autoLinked?: AutoLinkResult }
+  | {
+      status: 'verified';
+      bytes: number;
+      /** True when recognition was queued; false with a reason when it was not. */
+      ocrQueued?: boolean;
+      ocrSkipReason?: string;
+    }
   | { status: 'missing' }
   | { status: 'hash_mismatch'; expected: string; actual: string }
   | { status: 'unknown_document' };
@@ -284,7 +291,12 @@ export async function finalizeDocument(
     .run(nowIso(), documentId);
   record('doc_verified');
 
-  return { status: 'verified', bytes: stored.bytes };
+  // Queue text recognition now that the bytes are confirmed. Recognising an
+  // unverified file would mean extracting identifiers from something that may
+  // not be the document it claims to be — and then linking on them.
+  const ocr = enqueueOcr(db, orgId, documentId);
+
+  return { status: 'verified', bytes: stored.bytes, ocrQueued: ocr.queued, ocrSkipReason: ocr.reason };
 }
 
 /** Re-extracts links, e.g. after a report is committed that the document predates. */
@@ -314,6 +326,8 @@ export interface DocumentSummary {
   verified: boolean;
   status: string;
   uploadedAt: string | null;
+  /** Latest recognition state, mirrored onto the document row. */
+  ocrState: string | null;
   linkSource?: string;
   url?: string | null;
   expiresAt?: string | null;
@@ -332,6 +346,7 @@ const toSummary = (row: Record<string, unknown>): DocumentSummary => ({
   verified: Boolean(row.verified),
   status: String(row.status),
   uploadedAt: (row.uploaded_at as string) ?? null,
+  ocrState: (row.ocr_state as string) ?? null,
   ...(row.link_source ? { linkSource: String(row.link_source) } : {}),
 });
 

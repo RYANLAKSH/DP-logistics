@@ -249,6 +249,11 @@
         <div id="docMsg"></div>
       </div>
 
+      <div class="row" style="margin:0 0 14px">
+        <button class="ghost" id="ocrRun">Run recognition queue now</button>
+        <span class="sub" style="margin:0" id="ocrMsg"></span>
+      </div>
+
       <div class="card scroll"><table id="docTable"></table></div>
     </section>
 
@@ -585,16 +590,29 @@ $('docUpload').onclick = async () => {
 async function loadDocuments() {
   try {
     const data = await api('GET', '/v1/documents?limit=100');
+    // OCR state comes back on each document, so no extra round trip per row.
+    const ocrPill = (state) => {
+      if (!state) return '<span style="color:var(--muted)">—</span>';
+      const tone = state === 'done' ? 'pass'
+        : state === 'failed' ? 'block'
+        : state === 'no_text' ? 'warn' : 'warn';
+      return `<span class="pill ${tone}">${esc(state)}</span>`;
+    };
+
     $('docTable').innerHTML = `
-      <tr><th>Type</th><th>Reference</th><th>File</th><th>Issued by</th><th>Verified</th><th></th></tr>
+      <tr><th>Type</th><th>Reference</th><th>File</th><th>Verified</th><th>Text</th><th>Links found</th><th></th></tr>
       ${data.documents.map((d) => `<tr>
         <td>${esc(d.docType)}</td>
         <td class="mono">${esc(d.referenceNo || '—')}</td>
         <td>${esc(d.fileName || '—')}</td>
-        <td style="color:var(--muted)">${esc(d.issuedBy || '—')}</td>
         <td><span class="pill ${d.verified ? 'pass' : 'warn'}">${d.verified ? 'verified' : 'pending'}</span></td>
-        <td>${d.verified ? `<button class="ghost" data-doc="${esc(d.id)}">Open</button>` : ''}</td>
-      </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">No documents yet.</td></tr>'}`;
+        <td>${ocrPill(d.ocrState)}</td>
+        <td class="mono" data-links="${esc(d.id)}" style="color:var(--muted)">—</td>
+        <td>
+          ${d.verified ? `<button class="ghost" data-doc="${esc(d.id)}">Open</button>` : ''}
+          ${d.verified ? `<button class="ghost" data-ocr="${esc(d.id)}">Re-read</button>` : ''}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="7" style="color:var(--muted)">No documents yet.</td></tr>'}`;
 
     for (const button of $('docTable').querySelectorAll('[data-doc]')) {
       button.onclick = async () => {
@@ -602,10 +620,49 @@ async function loadDocuments() {
         window.open(signed.url, '_blank', 'noopener');
       };
     }
+
+    for (const button of $('docTable').querySelectorAll('[data-ocr]')) {
+      button.onclick = async () => {
+        try {
+          await api('POST', `/v1/documents/${button.dataset.ocr}/ocr`, {});
+          await api('POST', '/v1/admin/ocr/run', { limit: 10 });
+          await loadDocuments();
+        } catch (error) {
+          note($('docMsg'), error.message, 'err');
+        }
+      };
+    }
+
+    // Fill in what each document's text actually linked to.
+    for (const cell of $('docTable').querySelectorAll('[data-links]')) {
+      try {
+        const job = await api('GET', `/v1/documents/${cell.dataset.links}/ocr`);
+        const parts = [];
+        if (job.linkedContainers.length) parts.push(`${job.linkedContainers.length} container`);
+        if (job.linkedVins.length) parts.push(`${job.linkedVins.length} VIN`);
+        if (job.unmatched.length) parts.push(`${job.unmatched.length} unmatched`);
+        cell.textContent = parts.join(', ') || (job.error || '—');
+      } catch {
+        // No recognition attempted for this document; the dash stands.
+      }
+    }
   } catch (error) {
     $('docTable').innerHTML = `<tr><td class="errlist">${esc(error.message)}</td></tr>`;
   }
 }
+
+$('ocrRun').onclick = async () => {
+  try {
+    $('ocrMsg').textContent = 'running…';
+    const result = await api('POST', '/v1/admin/ocr/run', { limit: 25 });
+    $('ocrMsg').textContent =
+      `${result.completed} recognised, ${result.reused} reused, ` +
+      `${result.pendingProvider} still with provider, ${result.failed} failed`;
+    await loadDocuments();
+  } catch (error) {
+    $('ocrMsg').textContent = error.message;
+  }
+};
 
 /* ---------------- Dossier ---------------- */
 
