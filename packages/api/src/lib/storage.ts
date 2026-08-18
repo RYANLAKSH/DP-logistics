@@ -25,13 +25,42 @@ import { dirname, join, resolve, sep } from 'node:path';
 /** Hard ceiling on a single evidence image. */
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 
+/** Content types accepted for scan evidence — photographs only. */
 export const ALLOWED_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+/**
+ * Content types accepted for trade documents: pickup lists, delivery orders,
+ * invoices, shipping bills, LEO copies. Broader than evidence because these
+ * arrive as whatever the issuer produced — usually a PDF, sometimes a scan,
+ * sometimes a spreadsheet.
+ *
+ * Note what is absent: no HTML, no SVG, no archives. Those either execute in a
+ * viewer or hide arbitrary content, and a document store that renders untrusted
+ * markup is a stored-XSS vector against the admin panel.
+ */
+export const DOCUMENT_CONTENT_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/tiff',
+  'text/csv',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 
 const EXTENSION: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'image/tiff': 'tif',
+  'application/pdf': 'pdf',
+  'text/csv': 'csv',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 };
+
+const EXTENSIONS = 'jpg|png|webp|tif|pdf|csv|xls|xlsx|bin';
 
 export interface PresignedUpload {
   url: string;
@@ -78,10 +107,40 @@ export function evidenceKey(args: {
   return `org/${args.orgId}/${yyyy}/${mm}/${dd}/${args.scanId}.${ext}`;
 }
 
+/**
+ * Builds the object key for a trade document.
+ *
+ * Separate `doc/` prefix so bucket policy can treat documents and scan evidence
+ * differently — they have different retention obligations and, often, different
+ * audiences.
+ */
+export function documentKey(args: {
+  orgId: string;
+  documentId: string;
+  uploadedAt: string;
+  contentType: string;
+}): string {
+  const when = new Date(args.uploadedAt);
+  const date = Number.isNaN(when.getTime()) ? new Date() : when;
+
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const ext = EXTENSION[args.contentType] ?? 'bin';
+
+  return `doc/org/${args.orgId}/${yyyy}/${mm}/${dd}/${args.documentId}.${ext}`;
+}
+
 /** Keys we generate are a known shape; anything else is rejected on sight. */
-const KEY_PATTERN = /^org\/[0-9a-f-]{36}\/\d{4}\/\d{2}\/\d{2}\/[0-9a-f-]{36}\.(jpg|png|webp|bin)$/;
+const KEY_PATTERN = new RegExp(
+  `^(doc/)?org/[0-9a-f-]{36}/\\d{4}/\\d{2}/\\d{2}/[0-9a-f-]{36}\\.(${EXTENSIONS})$`,
+);
 
 export const isValidKey = (key: string): boolean => KEY_PATTERN.test(key);
+
+/** Union of both accept-lists, for the storage endpoint that serves either. */
+export const isAllowedContentType = (contentType: string): boolean =>
+  ALLOWED_CONTENT_TYPES.has(contentType) || DOCUMENT_CONTENT_TYPES.has(contentType);
 
 /* ------------------------------------------------------------------ *
  * Local driver

@@ -81,6 +81,27 @@ export function seed(db: Db): SeedResult {
     ).run(newId(), orgId, eventType, location, email);
   }
 
+  /*
+   * Documents a container must have before it can be dispatched.
+   *
+   * This set is the common denominator for a containerised vehicle export out of
+   * India; it is configurable per org because the real list varies by lane and
+   * by customer.
+   */
+  for (const docType of [
+    'PICKUP_LIST',
+    'DELIVERY_ORDER',
+    'COMMERCIAL_INVOICE',
+    'PACKING_LIST',
+    'SHIPPING_BILL',
+    'LEO',
+  ]) {
+    db.prepare(
+      `INSERT INTO document_requirements (id, org_id, doc_type, required_at)
+       VALUES (?,?,?,'before_dispatch')`,
+    ).run(newId(), orgId, docType);
+  }
+
   // Commit the dummy report through the real pipeline.
   const report = generateReport({ containers: 6, vehiclesPerContainer: 4 });
   const preview = previewCsv(toCsv(report));

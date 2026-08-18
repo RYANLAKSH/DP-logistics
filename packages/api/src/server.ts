@@ -28,7 +28,7 @@ import {
   getStorage,
   LocalStorageDriver,
   MAX_IMAGE_BYTES,
-  ALLOWED_CONTENT_TYPES,
+  isAllowedContentType,
 } from './lib/storage.ts';
 import {
   presignScanImage,
@@ -37,6 +37,18 @@ import {
   evidenceForReconciliation,
   missingEvidence,
 } from './modules/evidence.ts';
+import {
+  declareDocument,
+  finalizeDocument,
+  listDocuments,
+  documentsFor,
+  documentViewUrl,
+  buildDossier,
+  linkDocument,
+  relinkDocument,
+  DOC_TYPES,
+  MAX_DOCUMENT_BYTES,
+} from './modules/documents.ts';
 import { previewCsv, commitReport } from './modules/ingest.ts';
 import { submitReconciliation, overrideReconciliation } from './modules/reconciliation.ts';
 
@@ -761,6 +773,158 @@ export function createServer(db: Db) {
   });
 
   /* ---------------------------------------------------------------- *
+   * Trade documents
+   * ---------------------------------------------------------------- */
+
+  const documentSchema = z.object({
+    docType: z.enum(DOC_TYPES),
+    referenceNo: z.string().max(120).optional(),
+    issuedOn: z.string().max(40).optional(),
+    issuedBy: z.string().max(200).optional(),
+    fileName: z.string().max(300).optional(),
+    contentType: z.string().min(1),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    bytes: z.number().int().positive().max(MAX_DOCUMENT_BYTES),
+    locationId: z.string().optional(),
+    links: z.array(z.object({
+      entityType: z.enum(['container', 'vin', 'delivery_order', 'pickup_report', 'booking']),
+      entityId: z.string().min(1),
+    })).max(2000).optional(),
+    extractedText: z.string().max(2_000_000).optional(),
+  });
+
+  /** Registers a document and returns an upload URL. Same flow as scan evidence. */
+  app.post('/v1/documents', authenticate, require('supervisor'), wrap(async (req, res) => {
+    const parsed = documentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(res, 400, 'INVALID_INPUT', 'Bad document payload', parsed.error.flatten());
+    }
+
+    const result = await declareDocument(db, req.user!.orgId, req.user!.id, parsed.data);
+    if (!result.ok) return fail(res, 422, result.reason, 'Document declaration rejected');
+
+    res.status(201).json({ documentId: result.documentId, upload: result.upload });
+  }));
+
+  app.post('/v1/documents/:id/uploaded', authenticate, require('supervisor'), wrap(async (req, res) => {
+    const result = await finalizeDocument(db, req.user!.orgId, String(req.params.id), req.user!.id);
+
+    switch (result.status) {
+      case 'verified':
+        return res.json({ status: 'verified', bytes: result.bytes });
+      case 'unknown_document':
+        return fail(res, 404, 'NOT_FOUND', 'Document not found');
+      case 'missing':
+        return fail(res, 409, 'OBJECT_MISSING', 'No object found at the expected key');
+      case 'hash_mismatch':
+        return fail(res, 422, 'HASH_MISMATCH',
+          'Uploaded bytes do not match the declared SHA-256', {
+            expected: result.expected, actual: result.actual,
+          });
+    }
+  }));
+
+  app.get('/v1/documents', authenticate, (req, res) => {
+    res.json({
+      documents: listDocuments(db, req.user!.orgId, {
+        docType: req.query.docType ? String(req.query.docType) : undefined,
+        referenceNo: req.query.referenceNo ? String(req.query.referenceNo) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      }),
+    });
+  });
+
+  app.get('/v1/documents/:id/view', authenticate, wrap(async (req, res) => {
+    const signed = await documentViewUrl(db, req.user!.orgId, String(req.params.id), {
+      id: req.user!.id,
+      ip: req.ip ?? null,
+    });
+    if (!signed) return fail(res, 404, 'NOT_FOUND', 'Document not found or not yet verified');
+    res.json(signed);
+  }));
+
+  const linkSchema = z.object({
+    entityType: z.enum(['container', 'vin', 'delivery_order', 'pickup_report', 'booking']),
+    entityId: z.string().min(1),
+  });
+
+  app.post('/v1/documents/:id/links', authenticate, require('supervisor'), (req, res) => {
+    const parsed = linkSchema.safeParse(req.body);
+    if (!parsed.success) return fail(res, 400, 'INVALID_INPUT', 'Bad link payload');
+
+    const exists = db
+      .prepare('SELECT 1 AS ok FROM documents WHERE id = ? AND org_id = ?')
+      .get(String(req.params.id), req.user!.orgId);
+    if (!exists) return fail(res, 404, 'NOT_FOUND', 'Document not found');
+
+    linkDocument(db, String(req.params.id), parsed.data.entityType, parsed.data.entityId, 'manual');
+    res.status(201).json({ linked: true });
+  });
+
+  /**
+   * Re-runs extraction against the current reports.
+   *
+   * Needed because documents often arrive BEFORE the pickup report they relate
+   * to, and at that point there is nothing to link them to.
+   */
+  app.post('/v1/documents/:id/relink', authenticate, require('supervisor'), (req, res) => {
+    const result = relinkDocument(db, req.user!.orgId, String(req.params.id));
+    if (!result) return fail(res, 409, 'NO_TEXT', 'Document has no extracted text to link from');
+    res.json(result);
+  });
+
+  app.get('/v1/documents/for/:entityType/:entityId', authenticate, (req, res) => {
+    const entityType = String(req.params.entityType);
+    if (!['container', 'vin', 'delivery_order', 'pickup_report', 'booking'].includes(entityType)) {
+      return fail(res, 400, 'INVALID_INPUT', 'Unknown entity type');
+    }
+    res.json({
+      documents: documentsFor(db, req.user!.orgId, entityType as never, String(req.params.entityId)),
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Container dossier
+   * ---------------------------------------------------------------- */
+
+  /**
+   * Everything known about one container: the vehicles that belong in it, which
+   * are confirmed aboard with verified photographs, and whether the paperwork is
+   * complete. The answer to "can this ship?".
+   */
+  app.get('/v1/containers/:containerNo/dossier', authenticate, (req, res) => {
+    const dossier = buildDossier(db, req.user!.orgId, String(req.params.containerNo));
+    if (!dossier) return fail(res, 404, 'NOT_FOUND', 'Container not on any active report');
+    res.json(dossier);
+  });
+
+  const requirementSchema = z.object({
+    docType: z.enum(DOC_TYPES),
+    requiredAt: z.string().max(40).optional(),
+  });
+
+  app.post('/v1/admin/document-requirements', authenticate, require('admin'), (req, res) => {
+    const parsed = requirementSchema.safeParse(req.body);
+    if (!parsed.success) return fail(res, 400, 'INVALID_INPUT', 'Bad requirement payload');
+
+    const id = newId();
+    db.prepare(
+      `INSERT OR IGNORE INTO document_requirements (id, org_id, doc_type, required_at)
+       VALUES (?,?,?,?)`,
+    ).run(id, req.user!.orgId, parsed.data.docType, parsed.data.requiredAt ?? 'before_dispatch');
+
+    res.status(201).json({ id });
+  });
+
+  app.get('/v1/admin/document-requirements', authenticate, require('supervisor'), (req, res) => {
+    res.json({
+      requirements: db
+        .prepare('SELECT * FROM document_requirements WHERE org_id = ? ORDER BY doc_type')
+        .all(req.user!.orgId),
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
    * Local object store
    * ---------------------------------------------------------------- */
 
@@ -773,7 +937,10 @@ export function createServer(db: Db) {
    * one operation, and expires.
    */
   app.put('/v1/storage/:token',
-    express.raw({ type: '*/*', limit: MAX_IMAGE_BYTES }),
+    // Serves both evidence photos and trade documents, so the transport limit is
+    // the larger of the two. The per-declaration ceilings are enforced when the
+    // capability is issued, which is where the two differ.
+    express.raw({ type: '*/*', limit: MAX_DOCUMENT_BYTES }),
     (req, res) => {
       const storage = getStorage();
       if (!(storage instanceof LocalStorageDriver)) {
@@ -789,7 +956,7 @@ export function createServer(db: Db) {
       if (!Buffer.isBuffer(body) || body.length === 0) {
         return fail(res, 400, 'EMPTY_BODY', 'No bytes received');
       }
-      if (capability.c && !ALLOWED_CONTENT_TYPES.has(capability.c)) {
+      if (capability.c && !isAllowedContentType(capability.c)) {
         return fail(res, 400, 'UNSUPPORTED_CONTENT_TYPE', 'Content type not allowed');
       }
 

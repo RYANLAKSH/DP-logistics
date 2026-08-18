@@ -15,6 +15,9 @@ the pickup report. Nothing else.
 | [docs/data-model.md](docs/data-model.md) | Postgres schema, state machines, retention |
 | [docs/reconciliation-rules.md](docs/reconciliation-rules.md) | Matching logic, OCR validation, check-digit algorithms, outcome codes |
 | [docs/api.md](docs/api.md) | REST surface for mobile + admin |
+| [docs/security.md](docs/security.md) | Where images live, chain of custody, bucket hardening |
+| [docs/documents.md](docs/documents.md) | Trade document store, auto-linking, container dossier |
+| [docs/running.md](docs/running.md) | How to run it |
 | [docs/roadmap.md](docs/roadmap.md) | Phased build plan |
 
 ## The 60-second version

@@ -218,6 +218,91 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 /*
+ * Trade documents: the paperwork a shipment travels on.
+ *
+ * Kept in one table with a type rather than a table per document kind, because
+ * the set grows (VGM certificates, exam reports, EGM) and the handling is
+ * identical: upload, hash-verify, link, retain, serve under audit.
+ */
+CREATE TABLE IF NOT EXISTS documents (
+  id                TEXT PRIMARY KEY,
+  org_id            TEXT NOT NULL REFERENCES organizations(id),
+  doc_type          TEXT NOT NULL,
+  /* The issuer's own reference: invoice number, shipping bill number, DO
+     number. Not unique — amendments and reissues share it. */
+  reference_no      TEXT,
+  issued_on         TEXT,
+  /* Free-form issuer name; these come from many parties (CHA, exporter,
+     customs, shipping line). */
+  issued_by         TEXT,
+
+  file_name         TEXT,
+  file_key          TEXT,
+  file_sha256       TEXT,
+  file_content_type TEXT,
+  file_bytes        INTEGER,
+  uploaded_at       TEXT,
+  /* Same discipline as scan evidence: declared before upload, checked after. */
+  verified          INTEGER NOT NULL DEFAULT 0,
+
+  /* Text pulled out of the document, used for auto-linking and search. */
+  extracted_text    TEXT,
+
+  status            TEXT NOT NULL DEFAULT 'active'
+                      CHECK (status IN ('active','superseded','void')),
+  supersedes_id     TEXT REFERENCES documents(id),
+
+  uploaded_by       TEXT NOT NULL REFERENCES users(id),
+  location_id       TEXT REFERENCES locations(id),
+  created_at        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_type   ON documents (org_id, doc_type);
+CREATE INDEX IF NOT EXISTS idx_documents_ref    ON documents (reference_no);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents (status);
+
+/*
+ * What each document covers.
+ *
+ * Deliberately many-to-many: one commercial invoice covers many VINs, one VIN
+ * appears on an invoice, a packing list, a shipping bill and an LEO. Modelling
+ * this as a column on either side would force duplication and then divergence.
+ */
+CREATE TABLE IF NOT EXISTS document_links (
+  document_id  TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  entity_type  TEXT NOT NULL CHECK (entity_type IN
+                 ('container','vin','delivery_order','pickup_report','booking')),
+  entity_id    TEXT NOT NULL,
+  /* 'extracted' = we found the identifier in the document text;
+     'manual'    = a human asserted the link.
+     Worth distinguishing: an extracted link is evidence of what the document
+     says, a manual one is someone's claim about it. */
+  link_source  TEXT NOT NULL DEFAULT 'manual'
+                 CHECK (link_source IN ('manual','extracted')),
+  created_at   TEXT NOT NULL,
+  PRIMARY KEY (document_id, entity_type, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_links_entity ON document_links (entity_type, entity_id);
+
+/*
+ * Which document types a shipment must have before it can move.
+ *
+ * Configurable per org because the required set differs by trade lane and by
+ * customer, and hardcoding it would mean a code change every time a new
+ * requirement appears.
+ */
+CREATE TABLE IF NOT EXISTS document_requirements (
+  id           TEXT PRIMARY KEY,
+  org_id       TEXT NOT NULL REFERENCES organizations(id),
+  doc_type     TEXT NOT NULL,
+  /* Stage at which it becomes mandatory. */
+  required_at  TEXT NOT NULL DEFAULT 'before_dispatch',
+  is_active    INTEGER NOT NULL DEFAULT 1,
+  UNIQUE (org_id, doc_type, required_at)
+);
+
+/*
  * Who looked at which evidence image, and when. Separate from audit_log
  * because reads are high-volume and the retention question differs: the audit
  * log is kept for years, access records for months.
@@ -227,6 +312,7 @@ CREATE TABLE IF NOT EXISTS evidence_access_log (
   org_id            TEXT NOT NULL,
   actor_id          TEXT REFERENCES users(id),
   scan_id           TEXT REFERENCES scans(id),
+  document_id       TEXT REFERENCES documents(id),
   reconciliation_id TEXT REFERENCES reconciliations(id),
   action            TEXT NOT NULL,
   ip                TEXT,
@@ -257,6 +343,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
  * table_info so it is safe to run on every boot.
  */
 const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
+  ['evidence_access_log', 'document_id', 'TEXT'],
   ['scans', 'image_content_type', 'TEXT'],
   ['scans', 'image_bytes', 'INTEGER'],
   ['scans', 'image_uploaded_at', 'TEXT'],

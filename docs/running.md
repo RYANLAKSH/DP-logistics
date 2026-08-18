@@ -126,12 +126,32 @@ Keeping it a static page served by the API is a deliberate simplification: one
 process, one origin, no bundler. Moving it to a separate Next.js app later is a
 deployment change — the API surface it consumes does not change.
 
+## Evidence and documents
+
+Evidence images and trade documents both go straight to object storage with
+hash verification. In development the local driver keeps them on disk:
+
+```bash
+STORAGE_DIR=./.evidence          # where files land
+STORAGE_SECRET=<random>          # signs capability URLs; required in production
+PUBLIC_BASE_URL=http://localhost:3000
+```
+
+For production, set `S3_BUCKET` / `S3_REGION` (and `S3_ENDPOINT` for R2 or
+MinIO) and install the optional SDK:
+
+```bash
+npm i @aws-sdk/client-s3 @aws-sdk/s3-request-presigner -w @dp/api
+```
+
+Read [security.md](security.md) before the first real image lands — Object Lock
+in particular cannot be retrofitted onto an existing bucket.
+
 ## What is not built yet
 
-- **Image upload to object storage.** Scans carry a local image URI and a
-  SHA-256 field, but the presigned-URL flow in `docs/api.md` is not wired, so
-  evidence photos currently stay on the device. This is the most important gap:
-  the audit trail is only as good as the images behind it.
+- **The S3 driver has not been run against a real bucket.** No credentials in
+  this environment. The local driver mirrors its semantics and is what the tests
+  cover.
 - **PDF report ingest.** CSV and XLSX-as-CSV work; PDF table extraction is phase 3.
 - **BullMQ/Redis.** Email sends inline after commit rather than through a queue.
   Fine at pilot volume, needs the queue before scale.

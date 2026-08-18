@@ -106,6 +106,8 @@
     <button data-tab="dashboard" class="active">Dashboard</button>
     <button data-tab="upload">Upload report</button>
     <button data-tab="recons">Reconciliations</button>
+    <button data-tab="dossier">Container dossier</button>
+    <button data-tab="documents">Documents</button>
     <button data-tab="notifications">Email log</button>
     <button data-tab="recipients">Recipients</button>
   </nav>
@@ -173,6 +175,81 @@
         <button class="ghost" id="reconRefresh">Refresh</button>
       </div>
       <div class="card scroll"><table id="reconTable"></table></div>
+    </section>
+
+    <section id="dossier">
+      <h2>Container dossier</h2>
+      <p class="sub">
+        Everything known about one container: the vehicles that belong in it, which are
+        confirmed aboard with verified photographs, and whether the paperwork is complete.
+      </p>
+
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label>Container number</label>
+            <input id="dossierContainer" placeholder="ABCU1234567" autocapitalize="characters">
+          </div>
+        </div>
+        <div class="row"><button class="primary" id="dossierGo">Open dossier</button></div>
+      </div>
+
+      <div id="dossierOut"></div>
+    </section>
+
+    <section id="documents">
+      <h2>Documents</h2>
+      <p class="sub">
+        Pickup lists, delivery orders, invoices, packing lists, shipping bills, LEO copies.
+        Uploaded with the same hash verification as scan photographs, and auto-linked to the
+        containers and vehicles the document actually names.
+      </p>
+
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label>Type</label>
+            <select id="docType">
+              <option>PICKUP_LIST</option>
+              <option>DELIVERY_ORDER</option>
+              <option>COMMERCIAL_INVOICE</option>
+              <option>PACKING_LIST</option>
+              <option>SHIPPING_BILL</option>
+              <option>SHIPPING_BILL_SUMMARY</option>
+              <option>LEO</option>
+              <option>BILL_OF_LADING</option>
+              <option>VGM_CERTIFICATE</option>
+              <option>SEAL_CERTIFICATE</option>
+              <option>CUSTOMS_EXAM_REPORT</option>
+              <option>EGM</option>
+              <option>INSURANCE_CERTIFICATE</option>
+              <option>OTHER</option>
+            </select>
+          </div>
+          <div><label>Reference no</label><input id="docRef" placeholder="SB-7788991"></div>
+          <div><label>Issued by</label><input id="docIssuer" placeholder="CHA / exporter / customs"></div>
+          <div><label>Issued on</label><input id="docIssuedOn" type="date"></div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label>File (PDF, image, or spreadsheet)</label>
+          <input type="file" id="docFile"
+                 accept=".pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff,.csv,.xls,.xlsx">
+        </div>
+
+        <div style="margin-top:14px">
+          <label>
+            Document text — optional, used to auto-link containers and VINs.
+            Paste the text or type the identifiers this document covers.
+          </label>
+          <textarea id="docText" placeholder="Container: ABCU1234567&#10;Chassis: MA3..."></textarea>
+        </div>
+
+        <div class="row"><button class="primary" id="docUpload">Upload document</button></div>
+        <div id="docMsg"></div>
+      </div>
+
+      <div class="card scroll"><table id="docTable"></table></div>
     </section>
 
     <section id="notifications">
@@ -286,6 +363,7 @@ document.querySelectorAll('nav button').forEach((button) => {
     if (button.dataset.tab === 'dashboard') loadDashboard();
     if (button.dataset.tab === 'recons') loadRecons();
     if (button.dataset.tab === 'notifications') loadNotifications();
+    if (button.dataset.tab === 'documents') loadDocuments();
   };
 });
 
@@ -429,6 +507,166 @@ async function loadNotifications() {
       </tr>`).join('') || '<tr><td colspan="5" style="color:var(--muted)">Nothing yet.</td></tr>'}`;
   } catch (error) {
     $('notifTable').innerHTML = `<tr><td class="errlist">${esc(error.message)}</td></tr>`;
+  }
+}
+
+/* ---------------- Documents ---------------- */
+
+const sha256Hex = async (arrayBuffer) => {
+  // SubtleCrypto is available because the panel is served from localhost or
+  // https, both of which are secure contexts.
+  const digest = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+const CONTENT_TYPE_BY_EXT = {
+  pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  webp: 'image/webp', tif: 'image/tiff', tiff: 'image/tiff', csv: 'text/csv',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+$('docFile').onchange = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  // Text formats can auto-fill the extraction box; binary ones cannot, which is
+  // why the field stays editable.
+  if (/\.(csv|txt)$/i.test(file.name)) $('docText').value = await file.text();
+};
+
+$('docUpload').onclick = async () => {
+  const file = $('docFile').files?.[0];
+  if (!file) return note($('docMsg'), 'Choose a file first.', 'err');
+
+  try {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const contentType = file.type || CONTENT_TYPE_BY_EXT[ext];
+    if (!contentType) throw new Error(`Unrecognised file type: .${ext}`);
+
+    const buffer = await file.arrayBuffer();
+    const sha256 = await sha256Hex(buffer);
+
+    // 1. Declare — commits the expected hash before any bytes move.
+    const declared = await api('POST', '/v1/documents', {
+      docType: $('docType').value,
+      referenceNo: $('docRef').value.trim() || undefined,
+      issuedBy: $('docIssuer').value.trim() || undefined,
+      issuedOn: $('docIssuedOn').value || undefined,
+      fileName: file.name,
+      contentType,
+      sha256,
+      bytes: buffer.byteLength,
+      extractedText: $('docText').value.trim() || undefined,
+    });
+
+    // 2. Upload straight to the store using the capability URL.
+    const put = await fetch(declared.upload.url, {
+      method: 'PUT',
+      headers: { 'content-type': contentType },
+      body: buffer,
+    });
+    if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+
+    // 3. Verify what landed against what we declared.
+    const verified = await api('POST', `/v1/documents/${declared.documentId}/uploaded`, {});
+
+    note($('docMsg'),
+      `Uploaded and verified ${file.name} (${verified.bytes.toLocaleString()} bytes).`, 'ok');
+
+    $('docFile').value = '';
+    $('docText').value = '';
+    await loadDocuments();
+  } catch (error) {
+    note($('docMsg'), error.message, 'err');
+  }
+};
+
+async function loadDocuments() {
+  try {
+    const data = await api('GET', '/v1/documents?limit=100');
+    $('docTable').innerHTML = `
+      <tr><th>Type</th><th>Reference</th><th>File</th><th>Issued by</th><th>Verified</th><th></th></tr>
+      ${data.documents.map((d) => `<tr>
+        <td>${esc(d.docType)}</td>
+        <td class="mono">${esc(d.referenceNo || '—')}</td>
+        <td>${esc(d.fileName || '—')}</td>
+        <td style="color:var(--muted)">${esc(d.issuedBy || '—')}</td>
+        <td><span class="pill ${d.verified ? 'pass' : 'warn'}">${d.verified ? 'verified' : 'pending'}</span></td>
+        <td>${d.verified ? `<button class="ghost" data-doc="${esc(d.id)}">Open</button>` : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">No documents yet.</td></tr>'}`;
+
+    for (const button of $('docTable').querySelectorAll('[data-doc]')) {
+      button.onclick = async () => {
+        const signed = await api('GET', `/v1/documents/${button.dataset.doc}/view`);
+        window.open(signed.url, '_blank', 'noopener');
+      };
+    }
+  } catch (error) {
+    $('docTable').innerHTML = `<tr><td class="errlist">${esc(error.message)}</td></tr>`;
+  }
+}
+
+/* ---------------- Dossier ---------------- */
+
+$('dossierGo').onclick = loadDossier;
+$('dossierContainer').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadDossier(); });
+
+async function loadDossier() {
+  const out = $('dossierOut');
+  const containerNo = $('dossierContainer').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!containerNo) return note(out, 'Enter a container number.', 'err');
+
+  try {
+    const d = await api('GET', `/v1/containers/${encodeURIComponent(containerNo)}/dossier`);
+
+    const docPill = (doc) =>
+      `<span class="pill ${doc.verified ? 'pass' : 'warn'}" title="${esc(doc.linkSource || '')}">${esc(doc.docType)}</span>`;
+
+    out.innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="n">${d.loaded}/${d.expected}</div><div class="k">Vehicles aboard</div></div>
+        <div class="stat ${d.complete ? 'good' : ''}"><div class="n">${d.complete ? 'yes' : 'no'}</div><div class="k">Loading complete</div></div>
+        <div class="stat ${d.documentsComplete ? 'good' : 'bad'}"><div class="n">${d.documentsComplete ? 'yes' : 'no'}</div><div class="k">Paperwork complete</div></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3 style="margin:0 0 4px;font-size:15px">Required documents</h3>
+        <p class="sub" style="margin:0 0 12px">
+          A requirement counts as met only by a document that uploaded AND verified.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${d.requirements.map((r) =>
+            `<span class="pill ${r.present ? 'pass' : 'block'}">${r.present ? '✓' : '✕'} ${esc(r.docType)}</span>`
+          ).join('') || '<span class="sub">No requirements configured.</span>'}
+        </div>
+      </div>
+
+      <div class="card scroll">
+        <h3 style="margin:0 0 12px;font-size:15px">Vehicles</h3>
+        <table>
+          <tr><th>Pos</th><th class="mono">VIN</th><th>Vehicle</th><th>Verdict</th><th>Photos</th><th>Documents</th></tr>
+          ${d.vehicles.map((v) => `<tr>
+            <td>${v.loadPosition ?? '—'}</td>
+            <td class="mono">${esc(v.vin)}</td>
+            <td>${esc([v.make, v.model, v.colour].filter(Boolean).join(' ') || '—')}</td>
+            <td>${v.outcome
+              ? `<span class="pill ${severityOf(v.outcome)}">${esc(v.outcome)}</span>`
+              : '<span class="pill warn">not scanned</span>'}</td>
+            <td><span class="pill ${v.evidenceExpected && v.evidenceVerified === v.evidenceExpected ? 'pass' : 'warn'}">${v.evidenceVerified}/${v.evidenceExpected || 2}</span></td>
+            <td>${v.documents.map(docPill).join(' ') || '<span style="color:var(--muted)">—</span>'}</td>
+          </tr>`).join('')}
+        </table>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 12px;font-size:15px">Container-level documents</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${d.documents.map(docPill).join(' ') || '<span class="sub">None attached.</span>'}
+        </div>
+      </div>`;
+  } catch (error) {
+    out.innerHTML = `<div class="msg err">${esc(error.message)}</div>`;
   }
 }
 
