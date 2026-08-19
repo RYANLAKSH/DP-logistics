@@ -6,3 +6,34 @@ dist/
 .expo/
 packages/fixtures/data/
 *.db
+
+# ---------------------------------------------------------------------------
+# Real trade documents and evidence photos must never enter git history.
+#
+# Deleting a committed file does NOT remove it — it stays in history and on
+# every clone, and getting rid of it means rewriting history and force-pushing.
+# So the rule is: never let one in.
+#
+# Put real or redacted samples in samples/ (ignored below), or better still
+# outside the repo entirely.
+# ---------------------------------------------------------------------------
+samples/*
+!samples/README.md
+.evidence/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.xls
+*.xlsx
+*.doc
+*.docx
+
+# Synthetic fixtures are the exception: generated, no real data, safe to track.
+!packages/fixtures/synthetic/**
+
+# Screenshots and diagrams that belong to the docs are fine.
+!docs/**/*.png
+!docs/**/*.jpg
