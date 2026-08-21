@@ -173,11 +173,28 @@ export interface ReconEmailContext {
   progress?: { loaded: number; expected: number };
 }
 
+/**
+ * Human wording for each outcome.
+ *
+ * The enum is right for the database and the API; it is wrong for a subject
+ * line. A supervisor reads this on a phone, at speed, and should not have to
+ * decode WRONG_CONTAINER to know a truck needs stopping.
+ */
+const OUTCOME_LABEL: Readonly<Record<string, string>> = Object.freeze({
+  WRONG_CONTAINER: 'Wrong vehicle',
+  VIN_NOT_IN_REPORT: 'Vehicle not on the report',
+  CONTAINER_NOT_IN_REPORT: 'Container not on the report',
+  DUPLICATE_VIN: 'Vehicle presented twice',
+  CONTAINER_FULL: 'Container already complete',
+  EXPIRED_REPORT: 'Pickup report expired',
+});
+
 export function renderReconEmail(ctx: ReconEmailContext): { subject: string; body: string } {
   const isFailure = ctx.outcome !== 'MATCH';
+  const label = OUTCOME_LABEL[ctx.outcome] ?? ctx.outcome;
 
   const subject = isFailure
-    ? `[ACTION REQUIRED] ${ctx.outcome} — ${ctx.containerNo} at ${ctx.locationName}`
+    ? `[ACTION REQUIRED] ${label} — ${ctx.containerNo} at ${ctx.locationName}`
     : `Loaded: ${ctx.vin} into ${ctx.containerNo}`;
 
   const lines = [
@@ -189,6 +206,7 @@ export function renderReconEmail(ctx: ReconEmailContext): { subject: string; bod
     ctx.expectedContainerNo ? `Belongs in     ${ctx.expectedContainerNo}` : null,
     ctx.progress ? `Progress       ${ctx.progress.loaded} of ${ctx.progress.expected} loaded` : null,
     '',
+    `Outcome        ${ctx.outcome}`,
     `Report         ${ctx.reportReference}`,
     `Location       ${ctx.locationName}`,
     `Officer        ${ctx.officerName}`,

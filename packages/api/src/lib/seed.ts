@@ -102,8 +102,23 @@ export function seed(db: Db): SeedResult {
     ).run(newId(), orgId, docType);
   }
 
-  // Commit the dummy report through the real pipeline.
-  const report = generateReport({ containers: 6, vehiclesPerContainer: 4 });
+  /*
+   * Commit the dummy report through the real pipeline.
+   *
+   * The validity window is relative to today, not a fixed pair of dates. A
+   * hardcoded window silently expires as the calendar moves past it, and then
+   * every seeded reconciliation returns EXPIRED_REPORT — which looks like a
+   * broken engine rather than stale fixtures.
+   */
+  const day = (offset: number): string =>
+    new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+  const report = generateReport({
+    containers: 6,
+    vehiclesPerContainer: 4,
+    validFrom: day(-2),
+    validTo: day(5),
+  });
   const preview = previewCsv(toCsv(report));
 
   const committed = commitReport(db, preview, {

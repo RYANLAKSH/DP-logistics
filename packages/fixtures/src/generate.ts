@@ -163,6 +163,12 @@ export function generateReport(options: GenerateOptions = {}): FixtureReport {
     seed = 20260816,
     containers = 6,
     vehiclesPerContainer = 4,
+    /*
+     * Fixed dates on purpose: the fixture tests assert deep equality for a
+     * given seed, so this must not move with the clock. Anything that needs a
+     * currently-valid report — the API seed, for instance — passes its own
+     * window relative to today.
+     */
     validFrom = '2026-08-14',
     validTo = '2026-08-20',
   } = options;

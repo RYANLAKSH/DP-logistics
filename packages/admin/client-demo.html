@@ -1,0 +1,1143 @@
+<title>Gate Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,600;0,700;0,900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* ---------- palette: shipping livery, not software blue ----------------
+     Marine teal and gantry orange are the colours of the yard itself; they
+     also survive red-green colour blindness far better than green/red, which
+     matters when the whole product is a two-state go/stop decision.        */
+  :root {
+    --paper: #eceeec;
+    --card: #ffffff;
+    --card-2: #f4f6f5;
+    --ink: #101a1e;
+    --muted: #5c6b70;
+    --rule: #d4dad8;
+    --marine: #0f6b6b;
+    --marine-soft: #dcebea;
+    --sea: #10704f;
+    --sea-soft: #dcefe6;
+    --signal: #c14618;
+    --signal-soft: #fae4da;
+    --amber: #9a6410;
+    --amber-soft: #f8ecd6;
+
+    /* The phone keeps a dark screen: the real app is tuned for direct
+       sunlight, where a light UI is unreadable. */
+    --dev-bg: #0d1519;
+    --dev-card: #17242a;
+    --dev-card-2: #1f2f36;
+    --dev-ink: #eef3f2;
+    --dev-muted: #8fa2a7;
+    --dev-rule: #2c3f47;
+    --dev-sea: #3ec18f;
+    --dev-signal: #f2793d;
+    --dev-amber: #e8b04a;
+
+    --shadow-sm: 0 1px 2px rgba(16, 26, 30, .05), 0 4px 12px rgba(16, 26, 30, .05);
+    --shadow-lg: 0 2px 4px rgba(16, 26, 30, .06), 0 18px 44px rgba(16, 26, 30, .12);
+    --shadow-dev: 0 24px 60px rgba(9, 17, 20, .38);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0a1012;
+      --card: #111a1d;
+      --card-2: #162125;
+      --ink: #e6ebe9;
+      --muted: #8b9b9f;
+      --rule: #212e33;
+      --marine: #4fb3b3;
+      --marine-soft: #12292b;
+      --sea: #3ec18f;
+      --sea-soft: #0e2a22;
+      --signal: #f0763f;
+      --signal-soft: #331408;
+      --amber: #e8b04a;
+      --amber-soft: #2c2109;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+      --shadow-lg: 0 2px 4px rgba(0,0,0,.5), 0 18px 44px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0a1012;
+    --card: #111a1d;
+    --card-2: #162125;
+    --ink: #e6ebe9;
+    --muted: #8b9b9f;
+    --rule: #212e33;
+    --marine: #4fb3b3;
+    --marine-soft: #12292b;
+    --sea: #3ec18f;
+    --sea-soft: #0e2a22;
+    --signal: #f0763f;
+    --signal-soft: #331408;
+    --amber: #e8b04a;
+    --amber-soft: #2c2109;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-lg: 0 2px 4px rgba(0,0,0,.5), 0 18px 44px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 400 16px/1.6 Chivo, ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .shell { max-width: 1180px; margin: 0 auto; padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 44px) 80px; }
+
+  /* ---------- hero ---------- */
+  .hero { display: grid; gap: 18px; margin-bottom: clamp(32px, 5vw, 56px); }
+  .brandline {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    font-weight: 700; letter-spacing: -.01em; font-size: 1rem;
+  }
+  .brandline .dot { width: 9px; height: 9px; border-radius: 2px; background: var(--marine); }
+  .brandline .sub { font-weight: 400; color: var(--muted); font-size: .875rem; }
+
+  h1 {
+    font-weight: 900; font-size: clamp(2.1rem, 5.8vw, 3.4rem); line-height: 1.03;
+    letter-spacing: -.03em; margin: 0; max-width: 22ch; text-wrap: balance;
+  }
+  .hero .lede { margin: 0; max-width: 60ch; font-size: clamp(1rem, 2vw, 1.1875rem); color: var(--muted); }
+  .hero .lede b { color: var(--ink); font-weight: 600; }
+
+  .costs { display: flex; gap: clamp(20px, 4vw, 44px); flex-wrap: wrap; margin-top: 6px; }
+  .cost { display: grid; gap: 1px; }
+  .cost .fig {
+    font-weight: 900; font-size: clamp(1.5rem, 3.4vw, 2rem); letter-spacing: -.03em;
+    line-height: 1.1; color: var(--marine);
+  }
+  .cost .cap { font-size: .8125rem; color: var(--muted); max-width: 22ch; }
+
+  /* ---------- scenario bar ---------- */
+  .scenarios {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    padding: 14px; border: 1px solid var(--rule); border-radius: 12px;
+    background: var(--card); box-shadow: var(--shadow-sm); margin-bottom: 22px;
+  }
+  .scenarios .lbl {
+    font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); margin-right: 4px;
+  }
+  .sbtn {
+    appearance: none; cursor: pointer; font: 600 .875rem/1 Chivo, sans-serif;
+    padding: 10px 15px; border-radius: 8px; border: 1px solid var(--rule);
+    background: var(--card-2); color: var(--ink); transition: background .15s, border-color .15s;
+  }
+  .sbtn:hover { border-color: var(--marine); color: var(--marine); }
+  .sbtn.on { background: var(--marine); border-color: var(--marine); color: #fff; }
+  .sbtn[disabled] { opacity: .45; cursor: progress; }
+  .sbtn.reset { margin-left: auto; background: transparent; }
+
+  /* ---------- stage: phone + office ---------- */
+  .stage { display: grid; gap: 22px; grid-template-columns: 1fr; align-items: start; }
+  @media (min-width: 940px) { .stage { grid-template-columns: 352px minmax(0, 1fr); gap: 32px; } }
+
+  .card {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 14px;
+    box-shadow: var(--shadow-sm); padding: 20px;
+  }
+  .card + .card { margin-top: 18px; }
+  .card h2 {
+    font-weight: 700; font-size: 1rem; letter-spacing: -.01em; margin: 0 0 3px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .card .note { margin: 0 0 16px; color: var(--muted); font-size: .8125rem; }
+
+  /* phone */
+  .phone {
+    border-radius: 36px; padding: 11px; background: linear-gradient(#26363d, #131d22);
+    box-shadow: var(--shadow-dev); position: sticky; top: 20px;
+  }
+  @media (max-width: 939px) { .phone { position: static; margin: 0 auto; max-width: 352px; } }
+  .glass {
+    background: var(--dev-bg); color: var(--dev-ink); border-radius: 26px; overflow: hidden;
+    height: 640px; display: flex; flex-direction: column;
+  }
+  .bar {
+    display: flex; justify-content: space-between; padding: 11px 20px 5px;
+    font-size: 10.5px; color: var(--dev-muted); letter-spacing: .04em;
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .view { flex: 1; overflow-y: auto; padding: 6px 18px 16px; scroll-behavior: smooth; }
+  .acts { padding: 10px 18px 18px; display: grid; gap: 8px; }
+
+  .h-title { font-weight: 700; font-size: 1.3125rem; letter-spacing: -.02em; margin: 0 0 2px; }
+  .h-sub { color: var(--dev-muted); font-size: .8125rem; margin: 0 0 14px; }
+
+  .tile { background: var(--dev-card); border-radius: 12px; padding: 13px; display: grid; gap: 5px; margin-bottom: 9px; }
+  .tile .t { font-size: .875rem; font-weight: 600; }
+  .tile .m { font-size: .78125rem; color: var(--dev-muted); }
+
+  .btn {
+    appearance: none; border: 0; width: 100%; cursor: pointer; border-radius: 11px; padding: 15px;
+    font: 600 .9375rem/1 Chivo, sans-serif; background: var(--marine); color: #fff;
+  }
+  .btn.quiet { background: transparent; color: var(--dev-muted); border: 1px solid var(--dev-rule); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .lens {
+    position: relative; height: 138px; border-radius: 12px; overflow: hidden; margin-bottom: 12px;
+    background:
+      radial-gradient(120% 100% at 50% 0%, #2a3a42 0%, #16232a 70%),
+      repeating-linear-gradient(108deg, #1a262d 0 14px, #1e2b33 14px 28px);
+    display: grid; place-items: center;
+  }
+  .lens .reticle { width: 84%; height: 54px; border: 2.5px solid rgba(255,255,255,.86); border-radius: 6px; }
+  .lens.tall .reticle { height: 80px; }
+  .lens .cap {
+    position: absolute; top: 9px; left: 12px; font-size: 9.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--dev-muted); font-weight: 600;
+  }
+
+  .pick-head {
+    font-weight: 600; font-size: .6875rem; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--dev-muted); margin: 13px 0 6px;
+  }
+  .picks { display: grid; gap: 6px; }
+  .pick {
+    appearance: none; cursor: pointer; text-align: left; width: 100%; display: grid; gap: 2px;
+    background: var(--dev-card); color: var(--dev-ink); border: 1px solid var(--dev-rule);
+    border-radius: 10px; padding: 10px 12px; font: 400 .8125rem/1.35 Chivo, sans-serif;
+    transition: border-color .15s, background .15s;
+  }
+  .pick:hover { border-color: #4d6a75; background: var(--dev-card-2); }
+  .pick .pid { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .pick .pnote { color: var(--dev-muted); font-size: .6875rem; }
+
+  .call { border-radius: 14px; border: 2px solid; padding: 22px 16px; text-align: center; display: grid; gap: 5px; }
+  .call .mark { font-size: 2.5rem; font-weight: 900; line-height: 1; }
+  .call .word { font-size: 1.75rem; font-weight: 900; letter-spacing: -.02em; }
+  .call .say { font-size: .9375rem; color: var(--dev-ink); }
+  .go { border-color: var(--dev-sea); background: #0d2b22; color: var(--dev-sea); }
+  .stop { border-color: var(--dev-signal); background: #33170a; color: var(--dev-signal); }
+  .hold { border-color: var(--dev-amber); background: #2c2109; color: var(--dev-amber); }
+
+  .why { font-size: .8125rem; line-height: 1.5; margin: 13px 0 0; color: var(--dev-ink); }
+  .pair { display: flex; justify-content: space-between; gap: 10px; font-size: .8125rem; }
+  .pair .k { color: var(--dev-muted); }
+  .pair .v { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; text-align: right; }
+  .pair .v.flag { color: var(--dev-amber); }
+
+  .meter { height: 5px; border-radius: 3px; background: var(--dev-rule); overflow: hidden; }
+  .meter > i { display: block; height: 100%; background: var(--dev-sea); transition: width .4s ease; }
+
+  /* ---------- office side ---------- */
+  .feed { display: grid; gap: 0; }
+  .ev {
+    display: grid; grid-template-columns: 74px 1fr; gap: 12px; padding: 11px 0;
+    border-bottom: 1px solid var(--rule); font-size: .875rem;
+    animation: slip .28s ease both;
+  }
+  .ev:last-child { border-bottom: 0; }
+  .ev .when { color: var(--muted); font-size: .75rem; font-family: "IBM Plex Mono", monospace; padding-top: 2px; }
+  .ev .body { display: grid; gap: 2px; }
+  .ev .head { font-weight: 600; }
+  .ev .sub { color: var(--muted); font-size: .8125rem; }
+  .ev.stop-ev .head { color: var(--signal); }
+  .ev.go-ev .head { color: var(--sea); }
+  @keyframes slip { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .feed-empty { color: var(--muted); font-size: .875rem; margin: 0; }
+
+  .mail {
+    border: 1px solid var(--rule); border-radius: 12px; overflow: hidden;
+    background: var(--card-2); animation: slip .3s ease both;
+  }
+  .mail .mh { padding: 13px 15px; border-bottom: 1px solid var(--rule); display: grid; gap: 3px; }
+  .mail .subj { font-weight: 700; font-size: .9375rem; letter-spacing: -.01em; }
+  .mail .to { color: var(--muted); font-size: .78125rem; }
+  .mail pre {
+    margin: 0; padding: 15px; font-family: "IBM Plex Mono", monospace; font-size: .78125rem;
+    line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--ink);
+    overflow-x: auto;
+  }
+  .mail.urgent { border-color: var(--signal); }
+  .mail.urgent .mh { background: var(--signal-soft); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: .6875rem;
+    letter-spacing: .07em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px;
+  }
+  .chip.ok { background: var(--sea-soft); color: var(--sea); }
+  .chip.no { background: var(--signal-soft); color: var(--signal); }
+  .chip.wait { background: var(--amber-soft); color: var(--amber); }
+  .chip.flat { background: var(--card-2); color: var(--muted); border: 1px solid var(--rule); }
+
+  /* dossier */
+  .ship {
+    display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    margin-bottom: 18px;
+  }
+  .ship .box { border: 1px solid var(--rule); border-radius: 12px; padding: 15px; background: var(--card-2); }
+  .ship .fig { font-weight: 900; font-size: 1.625rem; letter-spacing: -.03em; line-height: 1.15; }
+  .ship .cap { color: var(--muted); font-size: .78125rem; }
+  .ship .box.good .fig { color: var(--sea); }
+  .ship .box.bad .fig { color: var(--signal); }
+
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+  /* Identifiers must never wrap mid-string; a model name happily can, and
+     letting it wrap is what keeps the manifest inside the card. */
+  th, td.id, td:last-child { white-space: nowrap; }
+  th {
+    font-weight: 600; font-size: .6875rem; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted);
+  }
+  td.id { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+
+  .papers { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .closing {
+    margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--rule);
+    display: grid; gap: 20px; grid-template-columns: 1fr;
+  }
+  @media (min-width: 780px) { .closing { grid-template-columns: 1.4fr 1fr; gap: 40px; } }
+  .closing h3 { font-weight: 700; font-size: 1.0625rem; margin: 0 0 8px; letter-spacing: -.01em; }
+  .closing p { margin: 0 0 12px; color: var(--muted); font-size: .9375rem; max-width: 60ch; }
+  .closing ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: .9375rem; display: grid; gap: 6px; }
+  .closing strong { color: var(--ink); font-weight: 600; }
+
+  :focus-visible { outline: 2px solid var(--marine); outline-offset: 2px; border-radius: 5px; }
+  .glass :focus-visible { outline-color: var(--dev-sea); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    .view { scroll-behavior: auto; }
+  }
+</style>
+<div class="shell">
+
+  <header class="hero">
+    <p class="brandline"><span class="dot"></span> Gate Check
+      <span class="sub">vehicle export reconciliation · Mundra</span></p>
+
+    <h1>Four cars go in. The paperwork says which four.</h1>
+
+    <p class="lede">
+      A 40ft container takes four vehicles, and the pickup report names exactly which VINs belong
+      in which box. Today that check happens by eye, against a printout, in the sun, by someone
+      who has forty more to load before the vessel cuts off. <b>When it goes wrong, nobody finds
+      out at the gate — they find out at the destination port.</b>
+    </p>
+
+    <div class="costs">
+      <div class="cost">
+        <span class="fig">3&ndash;6 weeks</span>
+        <span class="cap">to discover a mis-stuffed container, once the vessel has sailed</span>
+      </div>
+      <div class="cost">
+        <span class="fig">2 seconds</span>
+        <span class="cap">to discover it at the gate, before the doors close</span>
+      </div>
+      <div class="cost">
+        <span class="fig">Every load</span>
+        <span class="cap">photographed, timestamped and located, whether it passes or fails</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="scenarios">
+    <span class="lbl">Walk through</span>
+    <button class="sbtn" data-play="correct">A correct load</button>
+    <button class="sbtn" data-play="wrong">A wrong vehicle, caught</button>
+    <button class="sbtn" data-play="seal">Fill and seal a container</button>
+    <button class="sbtn" data-play="free">Let me try it</button>
+    <button class="sbtn reset" data-play="reset">Start over</button>
+  </div>
+
+  <div class="stage">
+
+    <!-- ------------------------ the phone ------------------------ -->
+    <div class="phone">
+      <div class="glass">
+        <div class="bar">
+          <span id="bar-l">Mundra · no signal</span>
+          <span id="bar-r">09:14</span>
+        </div>
+        <div class="view" id="view"></div>
+        <div class="acts" id="acts"></div>
+      </div>
+    </div>
+
+    <!-- ------------------------ the office ------------------------ -->
+    <div>
+      <section class="card">
+        <h2>At the office, the same moment
+          <span class="chip flat" id="live-chip">idle</span></h2>
+        <p class="note">
+          The officer's phone works with no signal. The moment it reconnects, everyone who needs
+          to know already knows.
+        </p>
+        <div class="feed" id="feed">
+          <p class="feed-empty">Nothing loaded yet. Pick a walkthrough above, or drive the phone yourself.</p>
+        </div>
+      </section>
+
+      <section class="card" id="mail-card" hidden>
+        <h2>The alert that went out</h2>
+        <p class="note">Sent within seconds of the scan. This is the message, not a mock-up of one.</p>
+        <div id="mail"></div>
+      </section>
+
+      <section class="card">
+        <h2>Can this container ship?
+          <span class="chip flat" id="ship-chip">not started</span></h2>
+        <p class="note">
+          Three things have to be true at once: the right vehicles aboard, a photograph behind
+          every one of them, and the paperwork complete. Each lives somewhere different today.
+        </p>
+
+        <div class="ship" id="ship"></div>
+
+        <div class="tablewrap"><table id="manifest"></table></div>
+
+        <h2 style="margin-top:22px">Paperwork</h2>
+        <p class="note">A document counts only once it has actually arrived and been verified.</p>
+        <div class="papers" id="papers"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="closing">
+    <div>
+      <h3>What you are looking at</h3>
+      <p>
+        The phone above runs the real matching logic — the same code that would run on a field
+        officer's device and again on the server — against a real 24-vehicle pickup report for six
+        containers. The verdicts are not scripted. Change the pairing and the answer changes.
+      </p>
+      <p>
+        The camera is stood in for: instead of pointing a lens at a plate, you pick what the
+        camera sees. Everything after that point is the product.
+      </p>
+    </div>
+    <div>
+      <h3>Where the build is</h3>
+      <ul>
+        <li><strong>Working today:</strong> matching engine, offline operation, evidence photos with
+          tamper checks, document store, automatic email, admin panel.</li>
+        <li><strong>Next:</strong> the mobile app on real handsets, and text recognition tested
+          against live customs scans.</li>
+        <li><strong>Not yet built:</strong> integration with your TOS or ERP in place of a file upload.</li>
+      </ul>
+    </div>
+  </footer>
+</div>
+<script type="module">
+const REPORT = {"ref":"PUR/20260814/INMUN/001","doRef":"DO-2026-08-4471","port":"Mundra","from":"2026-08-14","to":"2026-08-20"};
+const LINES = [{"id":"l1","lineNo":1,"containerNo":"OOLU2656042","vin":"MA3DY4XX5SM004431","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Pearl Arctic White","loadPosition":1,"destinationPort":"CLVAP"},{"id":"l2","lineNo":2,"containerNo":"OOLU2656042","vin":"MATVXBAFXSG500805","make":"Tata Motors","model":"Punch","variant":"Creative","colour":"Pearl Arctic White","loadPosition":2,"destinationPort":"CLVAP"},{"id":"l3","lineNo":3,"containerNo":"OOLU2656042","vin":"MA3RWNPT2SM730522","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Magma Grey","loadPosition":3,"destinationPort":"CLVAP"},{"id":"l4","lineNo":4,"containerNo":"OOLU2656042","vin":"MA36CY961SC255889","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Nexa Blue","loadPosition":4,"destinationPort":"CLVAP"},{"id":"l5","lineNo":5,"containerNo":"MSKU9913027","vin":"MA1YEDRR9SC299363","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Pearl Arctic White","loadPosition":1,"destinationPort":"CLVAP"},{"id":"l6","lineNo":6,"containerNo":"MSKU9913027","vin":"MA3VGAGJ8SM671690","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Fire Red","loadPosition":2,"destinationPort":"CLVAP"},{"id":"l7","lineNo":7,"containerNo":"MSKU9913027","vin":"MALWXRZ79SM990018","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Magma Grey","loadPosition":3,"destinationPort":"CLVAP"},{"id":"l8","lineNo":8,"containerNo":"MSKU9913027","vin":"MA3WK1MK4SG139190","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Nexa Blue","loadPosition":4,"destinationPort":"CLVAP"},{"id":"l9","lineNo":9,"containerNo":"OOLU0515390","vin":"MALXLEF23SG027017","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Midnight Black","loadPosition":1,"destinationPort":"MXVER"},{"id":"l10","lineNo":10,"containerNo":"OOLU0515390","vin":"MA3G81EA3SB725899","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Fire Red","loadPosition":2,"destinationPort":"MXVER"},{"id":"l11","lineNo":11,"containerNo":"OOLU0515390","vin":"MA3A04CJ6SC153352","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Fire Red","loadPosition":3,"destinationPort":"MXVER"},{"id":"l12","lineNo":12,"containerNo":"OOLU0515390","vin":"MALLERVX2SA865880","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Silky Silver","loadPosition":4,"destinationPort":"MXVER"},{"id":"l13","lineNo":13,"containerNo":"OOLU3581143","vin":"MA3J487H7SB793675","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Nexa Blue","loadPosition":1,"destinationPort":"CLVAP"},{"id":"l14","lineNo":14,"containerNo":"OOLU3581143","vin":"MA1J59MYXSM665998","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Magma Grey","loadPosition":2,"destinationPort":"CLVAP"},{"id":"l15","lineNo":15,"containerNo":"OOLU3581143","vin":"MA1KPUAW2SM601961","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Magma Grey","loadPosition":3,"destinationPort":"CLVAP"},{"id":"l16","lineNo":16,"containerNo":"OOLU3581143","vin":"MATTMN3B3SA535717","make":"Tata Motors","model":"Punch","variant":"Creative","colour":"Midnight Black","loadPosition":4,"destinationPort":"CLVAP"},{"id":"l17","lineNo":17,"containerNo":"OOLU8501238","vin":"MA3VVPW81SA527830","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Magma Grey","loadPosition":1,"destinationPort":"ZADUR"},{"id":"l18","lineNo":18,"containerNo":"OOLU8501238","vin":"MALSUL1G9SC217572","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Silky Silver","loadPosition":2,"destinationPort":"ZADUR"},{"id":"l19","lineNo":19,"containerNo":"OOLU8501238","vin":"MALWVZ0X2SA893134","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Pearl Arctic White","loadPosition":3,"destinationPort":"ZADUR"},{"id":"l20","lineNo":20,"containerNo":"OOLU8501238","vin":"MALV7Y4H5SM921767","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Nexa Blue","loadPosition":4,"destinationPort":"ZADUR"},{"id":"l21","lineNo":21,"containerNo":"SEGU4507796","vin":"MA1PYRX98SC949478","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Nexa Blue","loadPosition":1,"destinationPort":"IDJKT"},{"id":"l22","lineNo":22,"containerNo":"SEGU4507796","vin":"MA3D88BV0SG890931","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Nexa Blue","loadPosition":2,"destinationPort":"IDJKT"},{"id":"l23","lineNo":23,"containerNo":"SEGU4507796","vin":"MA3Z24NG2SA084329","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Fire Red","loadPosition":3,"destinationPort":"IDJKT"},{"id":"l24","lineNo":24,"containerNo":"SEGU4507796","vin":"MA34U5VGXSG970664","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Magma Grey","loadPosition":4,"destinationPort":"IDJKT"}];
+
+/* ============================================================================
+ * Engine — ported verbatim from @dp/shared-rules. Pure and dependency-free,
+ * which is exactly why it can run here unchanged: the same code runs on the
+ * phone (offline, advisory) and on the server (authoritative).
+ * ==========================================================================*/
+
+const LETTER_VALUES = (() => {
+  const map = {}; let v = 10;
+  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { while (v % 11 === 0) v++; map[ch] = v++; }
+  return map;
+})();
+
+function containerCheckDigit(first10) {
+  if (!/^[A-Z]{4}[0-9]{6}$/.test(first10)) return null;
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    const ch = first10[i];
+    sum += (i < 4 ? LETTER_VALUES[ch] : ch.charCodeAt(0) - 48) * (1 << i);
+  }
+  return (sum % 11) % 10;   // remainder 10 folds to 0
+}
+
+const normalizeIdentifier = (raw) =>
+  String(raw ?? '').toUpperCase().replace(/[\s\-_./\\|:,]+/g, '').trim();
+
+const isValidContainerNo = (v) =>
+  /^[A-Z]{4}[0-9]{7}$/.test(v) && containerCheckDigit(v.slice(0, 10)) === Number(v[10]);
+
+/* A number ending in 0 sits in the weaker 0/10 collision class: remainders 0
+   and 10 are indistinguishable, so a passing check is weaker evidence. */
+const isCheckDigitAmbiguous = (v) => v.length === 11 && v[10] === '0';
+
+/* A container number is positionally strict — 1-4 letters, 5-11 digits — so we
+   know which direction to resolve each confusable, and the check digit verifies
+   the result instead of us guessing. */
+const TO_DIGIT = { O:'0', Q:'0', D:'0', U:'0', I:'1', L:'1', T:'1', Z:'2', E:'3',
+                   A:'4', S:'5', G:'6', C:'6', Y:'7', B:'8', P:'9' };
+const TO_LETTER = { '0':'O', '1':'I', '2':'Z', '3':'E', '4':'A',
+                    '5':'S', '6':'G', '7':'T', '8':'B', '9':'P' };
+
+function coerceContainerShape(value) {
+  if (value.length !== 11) return value;
+  let out = '';
+  for (let i = 0; i < 11; i++) {
+    const ch = value[i];
+    out += i < 4 ? (TO_LETTER[ch] ?? ch) : (TO_DIGIT[ch] ?? ch);
+  }
+  return out;
+}
+
+/* Best check-digit-valid reading of a raw plate read, or null.
+   The single-substitution sweep is capped at ONE candidate: a blind sweep finds
+   about six variants that satisfy the check digit, so "it validates after an
+   edit" carries almost no information. */
+function resolveContainer(raw) {
+  const normalized = normalizeIdentifier(raw);
+  if (normalized.length !== 11) return null;
+  if (isValidContainerNo(normalized)) return { value: normalized, exact: true };
+
+  const coerced = coerceContainerShape(normalized);
+  if (isValidContainerNo(coerced)) return { value: coerced, exact: false };
+
+  if (/^[A-Z]{4}[0-9]{7}$/.test(coerced)) {
+    const repairs = [];
+    for (let i = 4; i < 11; i++) {
+      for (const d of '0123456789') {
+        if (d === coerced[i]) continue;
+        const variant = coerced.slice(0, i) + d + coerced.slice(i + 1);
+        if (isValidContainerNo(variant)) repairs.push(variant);
+      }
+    }
+    if (repairs.length === 1) return { value: repairs[0], exact: false };
+  }
+  return null;
+}
+
+/* Only I, O and Q are illegal in a VIN. D, L, S, B and Z are all legal —
+   folding those into digits would corrupt genuine VINs. */
+const normalizeVin = (raw) => normalizeIdentifier(raw).replace(/I/g, '1').replace(/[OQ]/g, '0');
+
+function levenshtein(a, b, max = 4) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let curr = new Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i; let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > max) return max + 1;
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length];
+}
+
+const suffixLen = (a, b) => {
+  let n = 0;
+  while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+  return n;
+};
+
+/* Returns null on a tie: an ambiguous fuzzy match must never be auto-resolved.
+   Guessing between two real vehicles is worse than retyping 17 characters. */
+function findVinLine(vin, lines, threshold = 0.85) {
+  const exact = lines.find((l) => l.vin === vin);
+  if (exact) return { line: exact, confidence: 1 };
+
+  const scored = [];
+  for (const line of lines) {
+    const d = levenshtein(vin, line.vin, 3);
+    if (d === 1) { scored.push({ line, confidence: 0.9 }); continue; }
+    if (suffixLen(vin, line.vin) >= 12 && vin.length === line.vin.length) {
+      scored.push({ line, confidence: 0.85 }); continue;
+    }
+    if (d === 2) scored.push({ line, confidence: 0.7 });
+  }
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.confidence - a.confidence);
+  if (scored[0].confidence < threshold) return null;
+  if (scored.length > 1 && scored[1].confidence === scored[0].confidence) return null;
+  return scored[0];
+}
+
+function progressFor(containerNo, lines, loaded, justLoaded) {
+  const forC = lines.filter((l) => l.containerNo === containerNo);
+  const done = new Set(loaded);
+  if (justLoaded) done.add(justLoaded);
+  const remainingVins = forC.filter((l) => !done.has(l.vin)).map((l) => l.vin);
+  return { loaded: forC.length - remainingVins.length, expected: forC.length, remainingVins };
+}
+
+const describe = (l) => [l.make, l.model, l.variant, l.colour].filter(Boolean).join(' ') || 'vehicle';
+
+/* Rules evaluated in a fixed order; the first hit wins. `trace` records which
+   were considered so the rail can show the reasoning, not just the answer. */
+function reconcile({ containerNo, vin, lines, loadedVins = [], reportValidTo, now = new Date() }) {
+  const c = normalizeIdentifier(containerNo);
+  const v = normalizeVin(vin);
+  const loaded = new Set(loadedVins);
+  const trace = [];
+  const step = (rule, why, hit) => { trace.push({ rule, why, hit }); };
+
+  if (!c || !v) {
+    step('Awaiting scan', 'One half of the pair is missing.', true);
+    return { outcome: 'PENDING', reasonCode: 'AWAITING_SCAN', severity: 'warn',
+      matchConfidence: 0, message: !c ? 'Scan the container number' : 'Scan the vehicle VIN', trace };
+  }
+
+  if (reportValidTo && now > reportValidTo) {
+    step('Report expired', 'Checked first — an expired report makes every verdict below it meaningless.', true);
+    return { outcome: 'EXPIRED_REPORT', reasonCode: 'REPORT_EXPIRED', severity: 'block',
+      matchConfidence: 0, message: 'Pickup report has expired',
+      detail: 'Contact operations for a current report.', trace };
+  }
+  step('Report expired', 'Report is inside its validity window.', false);
+
+  if (loaded.has(v)) {
+    step('Vehicle already loaded', 'This VIN already carries a live MATCH. A car cannot be in two containers.', true);
+    return { outcome: 'DUPLICATE_VIN', reasonCode: 'VIN_ALREADY_LOADED', severity: 'block',
+      matchConfidence: 1, message: 'This vehicle is already loaded',
+      detail: `VIN ${v} has already been reconciled into a container. Verify you are not scanning the same vehicle twice.`, trace };
+  }
+  step('Vehicle already loaded', 'VIN carries no live MATCH yet.', false);
+
+  const containerLines = lines.filter((l) => l.containerNo === c);
+  if (!containerLines.length) {
+    step('Container unknown', 'Scanned container appears nowhere on the active report.', true);
+    return { outcome: 'CONTAINER_NOT_IN_REPORT', reasonCode: 'CONTAINER_UNKNOWN', severity: 'block',
+      matchConfidence: 0, message: 'Container not on the pickup report',
+      detail: `${c} does not appear on the active report. Do not load.`, trace };
+  }
+  step('Container unknown', `${c} is on the report with ${containerLines.length} vehicles booked.`, false);
+
+  const here = findVinLine(v, containerLines);
+  if (here) {
+    const fuzzy = here.confidence < 1;
+    step('Vehicle belongs here', fuzzy
+      ? 'VIN matched a line in this container after a single-character correction.'
+      : 'VIN matches a line in this container exactly.', true);
+    const progress = progressFor(c, lines, loaded, here.line.vin);
+    return { outcome: 'MATCH', reasonCode: fuzzy ? 'FUZZY_VIN' : 'EXACT', severity: 'pass',
+      matchConfidence: here.confidence, matchedLine: here.line, progress,
+      message: `Load into ${c}`,
+      detail: `${describe(here.line)} — position ${here.line.loadPosition ?? '?'}. ` +
+        `${progress.loaded} of ${progress.expected} loaded.` +
+        (fuzzy ? ' VIN matched with correction — confirm the label before loading.' : ''),
+      trace };
+  }
+  step('Vehicle belongs here', 'VIN matches no line in this container.', false);
+
+  const elsewhere = findVinLine(v, lines);
+  if (elsewhere) {
+    step('Wrong container', 'VIN is on the report, but assigned to a different container. This is the failure the system exists to catch.', true);
+    return { outcome: 'WRONG_CONTAINER', reasonCode: 'WRONG_VEHICLE', severity: 'block',
+      matchConfidence: elsewhere.confidence, expectedLine: elsewhere.line,
+      progress: progressFor(c, lines, loaded),
+      message: 'DO NOT LOAD — wrong container',
+      detail: `${describe(elsewhere.line)} (VIN ${v}) is assigned to container ` +
+        `${elsewhere.line.containerNo}, not ${c}. Supervisor has been notified.`, trace };
+  }
+  step('Wrong container', 'VIN is not on the report at all.', false);
+
+  const progress = progressFor(c, lines, loaded);
+  if (!progress.remainingVins.length) {
+    step('Container full', `All ${progress.expected} booked vehicles are aboard, and this VIN is not one of them.`, true);
+    return { outcome: 'CONTAINER_FULL', reasonCode: 'OVER_CAPACITY', severity: 'block',
+      matchConfidence: 0, progress, message: 'Container is already complete',
+      detail: `All ${progress.expected} vehicles for ${c} are loaded. This vehicle does not belong here.`, trace };
+  }
+  step('Container full', `${progress.remainingVins.length} vehicles still expected.`, false);
+
+  step('Vehicle unknown', 'VIN appears nowhere on the active report.', true);
+  return { outcome: 'VIN_NOT_IN_REPORT', reasonCode: 'VEHICLE_UNKNOWN', severity: 'block',
+    matchConfidence: 0, progress, message: 'Vehicle not on the pickup report',
+    detail: `VIN ${v} does not appear on the active report. Do not load. ` +
+      `${c} still expects: ${progress.remainingVins.join(', ')}.`, trace };
+}
+
+/* ============================================================================
+ * Client walkthrough. The engine above is the product's real matching code;
+ * everything here is presentation and a scripted tour on top of it.
+ * ==========================================================================*/
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const VALID_TO = new Date(`${REPORT.to}T23:59:59.999Z`);
+const NOW = new Date(`${REPORT.from}T09:14:00Z`);
+const CONTAINERS = [...new Set(LINES.map((l) => l.containerNo))];
+const FOCUS = CONTAINERS[0];                 // the container the tour follows
+const OFF_REPORT = 'MSKU1000016';            // valid ISO 6346, another consignment
+const UNKNOWN_VIN = 'MA3ERLF1S00888777';     // well-formed, booked nowhere
+
+/* Paperwork a container needs before dispatch, in the order it normally lands. */
+const REQUIRED = [
+  { code: 'PICKUP_LIST', label: 'Pickup list', from: 'Exporter' },
+  { code: 'DELIVERY_ORDER', label: 'Delivery order', from: 'Shipping line' },
+  { code: 'COMMERCIAL_INVOICE', label: 'Invoice', from: 'Exporter' },
+  { code: 'PACKING_LIST', label: 'Packing list', from: 'Exporter' },
+  { code: 'SHIPPING_BILL', label: 'Shipping bill', from: 'Customs / CHA' },
+  { code: 'LEO', label: 'Let Export Order', from: 'Customs' },
+];
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wait = (ms) => new Promise((r) => setTimeout(r, reduceMotion ? 0 : ms));
+
+const state = {
+  step: 'job',
+  loaded: new Set(),
+  photos: new Map(),       // vin -> photographs verified
+  container: null,
+  result: null,
+  events: [],
+  mail: null,
+  papers: new Set(),
+  clock: 9 * 60 + 14,
+  playing: false,
+};
+
+/* ---------------- clock & events ---------------- */
+
+function stamp() {
+  state.clock += 1 + Math.floor(state.events.length % 3);
+  const h = String(Math.floor(state.clock / 60) % 24).padStart(2, '0');
+  const m = String(state.clock % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function logEvent(head, sub, kind) {
+  state.events.unshift({ when: stamp(), head, sub, kind });
+  renderFeed();
+}
+
+/* ---------------- the email the server actually sends ---------------- */
+
+function buildMail(result, containerNo, vin) {
+  const fail = result.outcome !== 'MATCH';
+  const vehicle = result.matchedLine ?? result.expectedLine;
+
+  const to = fail
+    ? 'supervisor@dp-logistics.example, ops@dp-logistics.example'
+    : 'ops@dp-logistics.example';
+
+  const LABEL = {
+    WRONG_CONTAINER: 'Wrong vehicle',
+    VIN_NOT_IN_REPORT: 'Vehicle not on the report',
+    CONTAINER_NOT_IN_REPORT: 'Container not on the report',
+    DUPLICATE_VIN: 'Vehicle presented twice',
+    CONTAINER_FULL: 'Container already complete',
+    EXPIRED_REPORT: 'Pickup report expired',
+  };
+
+  const subject = fail
+    ? `[ACTION REQUIRED] ${LABEL[result.outcome] ?? result.outcome} — ${containerNo} at Mundra Port`
+    : `Loaded: ${vin} into ${containerNo}`;
+
+  const body = [
+    result.message,
+    '',
+    `Container      ${containerNo}`,
+    `VIN            ${vin}`,
+    vehicle ? `Vehicle        ${[vehicle.make, vehicle.model, vehicle.colour].filter(Boolean).join(' ')}` : null,
+    result.expectedLine ? `Belongs in     ${result.expectedLine.containerNo}` : null,
+    result.progress ? `Progress       ${result.progress.loaded} of ${result.progress.expected} loaded` : null,
+    '',
+    `Outcome        ${result.outcome}`,
+    `Report         ${REPORT.ref} v1`,
+    `Location       Mundra Port`,
+    `Officer        Ramesh Patel`,
+    `Time           ${REPORT.from}T09:${String(state.clock % 60).padStart(2, '0')}:00Z`,
+    result.detail ? '' : null,
+    result.detail ?? null,
+    '',
+    '--',
+    'Gate Check · vehicle export reconciliation',
+  ].filter((l) => l !== null).join('\n');
+
+  return { to, subject, body, urgent: fail };
+}
+
+/* ---------------- office panels ---------------- */
+
+function renderFeed() {
+  const chip = $('live-chip');
+  if (!state.events.length) {
+    $('feed').innerHTML =
+      '<p class="feed-empty">Nothing loaded yet. Pick a walkthrough above, or drive the phone yourself.</p>';
+    chip.className = 'chip flat'; chip.textContent = 'idle';
+    return;
+  }
+  const blocks = state.events.filter((e) => e.kind === 'stop').length;
+  chip.className = blocks ? 'chip no' : 'chip ok';
+  chip.textContent = blocks ? `${blocks} needing attention` : 'all clear';
+
+  $('feed').innerHTML = state.events.slice(0, 8).map((e) => `
+    <div class="ev ${e.kind === 'stop' ? 'stop-ev' : e.kind === 'go' ? 'go-ev' : ''}">
+      <span class="when">${esc(e.when)}</span>
+      <span class="body">
+        <span class="head">${esc(e.head)}</span>
+        <span class="sub">${esc(e.sub)}</span>
+      </span>
+    </div>`).join('');
+}
+
+function renderMail() {
+  const card = $('mail-card');
+  if (!state.mail) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const m = state.mail;
+  $('mail').innerHTML = `
+    <div class="mail ${m.urgent ? 'urgent' : ''}">
+      <div class="mh">
+        <span class="subj">${esc(m.subject)}</span>
+        <span class="to">To: ${esc(m.to)}</span>
+      </div>
+      <pre>${esc(m.body)}</pre>
+    </div>`;
+}
+
+function renderShip() {
+  const lines = LINES.filter((l) => l.containerNo === FOCUS);
+  const aboard = lines.filter((l) => state.loaded.has(l.vin));
+  const photographed = aboard.filter((l) => (state.photos.get(l.vin) ?? 0) === 2);
+  const papersDone = REQUIRED.filter((r) => state.papers.has(r.code));
+  const canShip = aboard.length === lines.length
+    && photographed.length === lines.length
+    && papersDone.length === REQUIRED.length;
+
+  const chip = $('ship-chip');
+  if (!aboard.length && !papersDone.length) {
+    chip.className = 'chip flat'; chip.textContent = 'not started';
+  } else if (canShip) {
+    chip.className = 'chip ok'; chip.textContent = 'cleared to ship';
+  } else {
+    chip.className = 'chip wait'; chip.textContent = 'in progress';
+  }
+
+  $('ship').innerHTML = `
+    <div class="box ${aboard.length === lines.length ? 'good' : ''}">
+      <div class="fig">${aboard.length}/${lines.length}</div>
+      <div class="cap">vehicles aboard ${esc(FOCUS)}</div>
+    </div>
+    <div class="box ${photographed.length === lines.length && lines.length ? 'good' : ''}">
+      <div class="fig">${photographed.length}/${lines.length}</div>
+      <div class="cap">with a verified photograph</div>
+    </div>
+    <div class="box ${papersDone.length === REQUIRED.length ? 'good' : papersDone.length ? '' : 'bad'}">
+      <div class="fig">${papersDone.length}/${REQUIRED.length}</div>
+      <div class="cap">documents received</div>
+    </div>`;
+
+  $('manifest').innerHTML = `
+    <tr><th>Pos</th><th>VIN</th><th>Vehicle</th><th>Status</th><th>Photos</th></tr>
+    ${lines.map((l) => {
+      const on = state.loaded.has(l.vin);
+      const shots = state.photos.get(l.vin) ?? 0;
+      return `<tr>
+        <td>${l.loadPosition ?? '—'}</td>
+        <td class="id">${esc(l.vin)}</td>
+        <td>${esc([l.make, l.model, l.colour].filter(Boolean).join(' '))}</td>
+        <td>${on ? '<span class="chip ok">aboard</span>' : '<span class="chip flat">expected</span>'}</td>
+        <td>${on
+          ? `<span class="chip ${shots === 2 ? 'ok' : 'wait'}">${shots}/2</span>`
+          : '<span class="chip flat">—</span>'}</td>
+      </tr>`;
+    }).join('')}`;
+
+  $('papers').innerHTML = REQUIRED.map((r) => {
+    const have = state.papers.has(r.code);
+    return `<span class="chip ${have ? 'ok' : 'no'}" title="${esc(r.from)}">
+      ${have ? '✓' : '✕'} ${esc(r.label)}</span>`;
+  }).join('');
+}
+
+/* ---------------- phone screens ---------------- */
+
+function screenJob() {
+  const aboard = state.loaded.size;
+  $('bar-l').textContent = 'Mundra · no signal';
+  $('view').innerHTML = `
+    <h2 class="h-title">Mundra Port</h2>
+    <p class="h-sub">Ramesh Patel · field officer</p>
+
+    <div class="tile" style="background:#2c2109">
+      <span class="m" style="color:var(--dev-amber)">
+        No signal. Scans are saved here and sent the moment you reconnect.
+      </span>
+    </div>
+
+    <div class="tile">
+      <span class="t">${esc(REPORT.ref)}</span>
+      <span class="m">${esc(REPORT.port)} · valid to ${esc(REPORT.to)}</span>
+      <span class="m">${aboard} of ${LINES.length} vehicles loaded today</span>
+    </div>
+
+    ${CONTAINERS.map((c) => {
+      const lines = LINES.filter((l) => l.containerNo === c);
+      const done = lines.filter((l) => state.loaded.has(l.vin)).length;
+      const full = done === lines.length;
+      return `<div class="tile" style="gap:8px">
+        <div class="pair">
+          <span class="v" style="text-align:left">${esc(c)}</span>
+          <span class="k" style="color:${full ? 'var(--dev-sea)' : 'var(--dev-muted)'}">
+            ${full ? 'sealed' : `${done}/${lines.length}`}</span>
+        </div>
+        <span class="meter"><i style="width:${(done / lines.length) * 100}%"></i></span>
+      </div>`;
+    }).join('')}`;
+
+  $('acts').innerHTML = `<button class="btn" data-go="container">Scan next vehicle</button>`;
+}
+
+function screenContainer() {
+  $('bar-l').textContent = 'Camera · container door';
+  $('view').innerHTML = `
+    <h2 class="h-title">Scan the container</h2>
+    <p class="h-sub">Point at the number panel on the door</p>
+
+    <div class="lens"><span class="cap">live</span><span class="reticle"></span></div>
+
+    <p class="pick-head">What the camera sees</p>
+    <div class="picks">
+      ${CONTAINERS.map((c) => {
+        const lines = LINES.filter((l) => l.containerNo === c);
+        const done = lines.filter((l) => state.loaded.has(l.vin)).length;
+        return `<button class="pick" data-can="${esc(c)}">
+          <span class="pid">${esc(c)}</span>
+          <span class="pnote">${done}/${lines.length} loaded${c === FOCUS ? ' · today’s box' : ''}</span>
+        </button>`;
+      }).join('')}
+      <button class="pick" data-can="${OFF_REPORT}">
+        <span class="pid">${OFF_REPORT}</span>
+        <span class="pnote">a box from a different consignment</span>
+      </button>
+    </div>`;
+
+  $('acts').innerHTML = `<button class="btn quiet" data-go="job">Cancel</button>`;
+}
+
+function screenVin() {
+  const mine = LINES.filter((l) => l.containerNo === state.container);
+  const stray = LINES.find((l) => l.containerNo !== state.container && !state.loaded.has(l.vin));
+
+  $('bar-l').textContent = 'Camera · door pillar';
+  $('view').innerHTML = `
+    <h2 class="h-title">Scan the vehicle</h2>
+    <p class="h-sub">The VIN label on the door pillar · ${esc(state.container)}</p>
+
+    <div class="lens tall"><span class="cap">live</span><span class="reticle"></span></div>
+
+    ${mine.length ? `<p class="pick-head">Booked for this container</p>
+      <div class="picks">${mine.map((l) => `
+        <button class="pick" data-vin="${esc(l.vin)}">
+          <span class="pid">${esc(l.vin)}</span>
+          <span class="pnote">${esc([l.make, l.model, l.colour].filter(Boolean).join(' '))}${state.loaded.has(l.vin) ? ' · already aboard' : ''}</span>
+        </button>`).join('')}</div>` : ''}
+
+    <p class="pick-head">Or a vehicle that should not be here</p>
+    <div class="picks">
+      ${stray ? `<button class="pick" data-vin="${esc(stray.vin)}">
+        <span class="pid">${esc(stray.vin)}</span>
+        <span class="pnote">booked for ${esc(stray.containerNo)}, not this box</span>
+      </button>` : ''}
+      <button class="pick" data-vin="${UNKNOWN_VIN}">
+        <span class="pid">${UNKNOWN_VIN}</span>
+        <span class="pnote">not on today's report at all</span>
+      </button>
+    </div>`;
+
+  $('acts').innerHTML = `<button class="btn quiet" data-go="container">Back</button>`;
+}
+
+function screenCall() {
+  const r = state.result;
+  const pass = r.severity === 'pass';
+  const tone = pass ? 'go' : r.severity === 'warn' ? 'hold' : 'stop';
+  const mark = pass ? '✓' : r.severity === 'warn' ? '!' : '✕';
+
+  $('bar-l').textContent = 'Result';
+  $('view').innerHTML = `
+    <div class="call ${tone}">
+      <span class="mark">${mark}</span>
+      <span class="word">${pass ? 'LOAD IT' : 'STOP'}</span>
+      <span class="say">${esc(r.message)}</span>
+    </div>
+
+    ${r.detail ? `<p class="why">${esc(r.detail)}</p>` : ''}
+
+    <div class="tile" style="gap:9px;margin-top:14px">
+      <div class="pair"><span class="k">Container</span><span class="v">${esc(state.container)}</span></div>
+      <div class="pair"><span class="k">Vehicle</span><span class="v">${esc(normalizeVin(state.lastVin))}</span></div>
+      ${r.matchedLine ? `<div class="pair"><span class="k">Model</span>
+        <span class="v" style="font-family:Chivo">${esc([r.matchedLine.make, r.matchedLine.model].filter(Boolean).join(' '))}</span></div>` : ''}
+      ${r.matchedLine?.loadPosition != null ? `<div class="pair"><span class="k">Position</span>
+        <span class="v">#${r.matchedLine.loadPosition}</span></div>` : ''}
+      ${r.expectedLine ? `<div class="pair"><span class="k">Belongs in</span>
+        <span class="v flag">${esc(r.expectedLine.containerNo)}</span></div>` : ''}
+    </div>
+
+    ${r.progress ? `<div class="tile" style="gap:9px">
+      <span class="t">${r.progress.loaded} of ${r.progress.expected} aboard</span>
+      <span class="meter"><i style="width:${(r.progress.loaded / Math.max(r.progress.expected, 1)) * 100}%"></i></span>
+      ${r.progress.remainingVins.length
+        ? `<span class="m">Still to come</span>${r.progress.remainingVins.map((v) =>
+            `<span class="m" style="font-family:'IBM Plex Mono',monospace">${esc(v)}</span>`).join('')}`
+        : `<span class="m" style="color:var(--dev-sea)">Container complete — ready to seal.</span>`}
+    </div>` : ''}
+
+    <p class="why" style="color:var(--dev-muted)">
+      Both photographs saved with the time, the place and your name. They will upload on their own.
+    </p>`;
+
+  $('acts').innerHTML = `
+    <button class="btn" data-go="container">${pass ? 'Next vehicle' : 'Try again'}</button>
+    <button class="btn quiet" data-go="job">Back to the yard</button>`;
+}
+
+const SCREENS = { job: screenJob, container: screenContainer, vin: screenVin, call: screenCall };
+
+function render() {
+  SCREENS[state.step]();
+  renderShip();
+  renderMail();
+  $('view').scrollTop = 0;
+}
+
+function go(step) {
+  state.step = step;
+  if (step === 'container') { state.container = null; state.result = null; }
+  render();
+}
+
+/* ---------------- actions ---------------- */
+
+function pickContainer(raw) {
+  const resolved = resolveContainer(raw);
+  state.container = resolved ? resolved.value : normalizeIdentifier(raw);
+  go('vin');
+}
+
+function pickVin(raw) {
+  state.lastVin = raw;
+  const result = reconcile({
+    containerNo: state.container, vin: raw, lines: LINES,
+    loadedVins: state.loaded, reportValidTo: VALID_TO, now: NOW,
+  });
+  state.result = result;
+
+  const vin = normalizeVin(raw);
+
+  if (result.outcome === 'MATCH' && result.matchedLine) {
+    state.loaded.add(result.matchedLine.vin);
+    state.photos.set(result.matchedLine.vin, 2);
+    logEvent(
+      `Loaded into ${state.container}`,
+      `${[result.matchedLine.make, result.matchedLine.model].filter(Boolean).join(' ')} · ${result.matchedLine.vin}`,
+      'go');
+  } else {
+    logEvent(
+      result.outcome === 'WRONG_CONTAINER' ? 'Wrong vehicle stopped at the gate'
+        : result.outcome === 'DUPLICATE_VIN' ? 'Vehicle presented twice'
+        : result.outcome === 'CONTAINER_NOT_IN_REPORT' ? 'Unknown container presented'
+        : 'Vehicle not on the report',
+      result.expectedLine
+        ? `${vin} belongs in ${result.expectedLine.containerNo} — supervisor notified`
+        : `${vin} at ${state.container} — supervisor notified`,
+      'stop');
+  }
+
+  state.mail = buildMail(result, state.container, vin);
+  go('call');
+
+  if (result.progress && result.progress.remainingVins.length === 0 && result.outcome === 'MATCH') {
+    logEvent(`${state.container} complete`, 'All four aboard and photographed — ready to seal', 'go');
+  }
+}
+
+/* ---------------- guided tours ---------------- */
+
+async function tour(kind) {
+  if (state.playing) return;
+  state.playing = true;
+  document.querySelectorAll('.sbtn').forEach((b) => {
+    b.disabled = true;
+    b.classList.toggle('on', b.dataset.play === kind);
+  });
+
+  const lines = LINES.filter((l) => l.containerNo === FOCUS);
+
+  try {
+    if (kind === 'reset') {
+      state.loaded.clear(); state.photos.clear(); state.papers.clear();
+      state.events = []; state.mail = null; state.result = null;
+      state.clock = 9 * 60 + 14;
+      renderFeed(); go('job');
+    }
+
+    if (kind === 'free') { go('container'); }
+
+    if (kind === 'correct') {
+      const next = lines.find((l) => !state.loaded.has(l.vin)) ?? lines[0];
+      go('container'); await wait(700);
+      pickContainer(FOCUS); await wait(900);
+      pickVin(next.vin);
+    }
+
+    if (kind === 'wrong') {
+      const stray = LINES.find((l) => l.containerNo !== FOCUS && !state.loaded.has(l.vin));
+      go('container'); await wait(700);
+      pickContainer(FOCUS); await wait(900);
+      pickVin(stray.vin);
+    }
+
+    if (kind === 'seal') {
+      /* The paperwork arrives while loading happens — that is the real
+         sequence, and it is why the checklist matters. */
+      const papers = [...REQUIRED];
+      go('container'); await wait(500);
+      pickContainer(FOCUS); await wait(500);
+
+      for (const [i, line] of lines.entries()) {
+        if (!state.loaded.has(line.vin)) { pickVin(line.vin); await wait(750); }
+        const paper = papers[i];
+        if (paper) {
+          state.papers.add(paper.code);
+          logEvent(`${paper.label} received`, `From ${paper.from} · matched to ${FOCUS}`, 'doc');
+          renderShip(); await wait(400);
+        }
+        if (i < lines.length - 1) { go('container'); await wait(400); pickContainer(FOCUS); await wait(450); }
+      }
+
+      for (const paper of papers.slice(lines.length)) {
+        state.papers.add(paper.code);
+        logEvent(`${paper.label} received`, `From ${paper.from} · matched to ${FOCUS}`, 'doc');
+        renderShip(); await wait(500);
+      }
+      logEvent('Cleared to ship', `${FOCUS} — vehicles, photographs and paperwork all complete`, 'go');
+      renderShip();
+    }
+  } finally {
+    state.playing = false;
+    document.querySelectorAll('.sbtn').forEach((b) => { b.disabled = false; });
+  }
+}
+
+/* ---------------- wiring ---------------- */
+
+document.addEventListener('click', (event) => {
+  const el = event.target.closest('[data-go],[data-can],[data-vin],[data-play]');
+  if (!el) return;
+
+  if (el.dataset.play) { void tour(el.dataset.play); return; }
+  if (state.playing) return;
+
+  if (el.dataset.can) pickContainer(el.dataset.can);
+  else if (el.dataset.vin) pickVin(el.dataset.vin);
+  else go(el.dataset.go);
+});
+
+renderFeed();
+render();
+</script>
