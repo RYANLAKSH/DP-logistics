@@ -4,7 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
+// Stamped into the bundle so every movement record says which build produced
+// it. Without that, "which version was the driver running?" is unanswerable
+// exactly when it matters.
+const APP_VERSION = process.env.APP_VERSION ?? process.env.npm_package_version ?? 'dev'
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   plugins: [
     react(),
     tailwindcss(),

@@ -42,23 +42,25 @@ describe('verifyMovement', () => {
 
     const [fn, args] = rpc.mock.calls[0]!
     expect(fn).toBe('verify_movement')
-    expect(args).toEqual({
+    expect(args).toMatchObject({
       p_movement_id: 'mv1',
       p_assignment_id: 'a1',
       p_scanned_container_no: 'CULVNSA2601795',
       p_scanned_chassis_no: 'MAT752389T7R19810',
-      p_container_attempt_id: null,
-      p_chassis_attempt_id: null,
-      p_commit: true,
     })
 
-    // The security property, asserted directly: a client that could send an
-    // expected value or an outcome could make any scan pass. Attempt ids are
-    // references to rows the server itself wrote, not values it will trust.
+    // The security property, asserted as a property rather than as an exact
+    // payload: a client that could send an expected value, an outcome or a
+    // status could make any scan pass. Asserting the absence of those keys
+    // keeps holding as the call gains GPS, timestamps and a build stamp;
+    // a deep-equality assertion would just have to be rewritten each time,
+    // which is how a security test quietly stops testing anything.
     const keys = Object.keys(args as object)
     expect(keys.some((k) => k.includes('expected'))).toBe(false)
     expect(keys.some((k) => k.includes('outcome'))).toBe(false)
     expect(keys.some((k) => k.includes('status'))).toBe(false)
+    expect(keys.some((k) => k.includes('verified'))).toBe(false)
+    expect(keys.some((k) => k.includes('driver'))).toBe(false)
   })
 
   it('defaults to committing, and passes a check through explicitly', async () => {

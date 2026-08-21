@@ -108,6 +108,11 @@ create table movement_events (
 
   completed_at_device timestamptz,
   verified_at       timestamptz not null default now(),   -- server clock. Authoritative
+  -- Materialised, not computed on read: a device reporting a time well off the
+  -- server's is a signal — sometimes a wrong timezone, sometimes an attempt to
+  -- make a late movement look punctual — and storing it makes it indexable.
+  clock_skew_s      int generated always as
+                      (extract(epoch from (verified_at - completed_at_device))::int) stored,
   app_version       text,
   created_at        timestamptz not null default now(),
 

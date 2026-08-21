@@ -13,7 +13,8 @@
     "dev": "npm run dev -w @dp/pwa",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:test": "./scripts/db-test.sh",
-    "test:shared": "vitest run"
+    "test:shared": "vitest run",
+    "db:concurrency": "./scripts/db-concurrency.sh"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

@@ -31,6 +31,8 @@ export interface ScanSubmission {
    * physically been moved. A block is recorded either way.
    */
   commit?: boolean
+  /** Event-based location, when the driver has granted it. Never watched. */
+  gps?: { lat: number; lng: number; accuracy: number } | null
 }
 
 export interface ScanEvidence {

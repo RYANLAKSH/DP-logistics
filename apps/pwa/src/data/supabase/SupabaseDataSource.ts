@@ -178,6 +178,7 @@ export class SupabaseDataSource implements DataSource {
   async verifyMovement(input: ScanSubmission): Promise<VerificationResult> {
     // The authoritative decision. Note what is NOT sent: no expected values, no
     // outcome, no status. The server reads those from the manifest itself.
+    const gps = input.gps === undefined ? await currentPosition() : input.gps
     const data = unwrap(
       await this.db.rpc('verify_movement', {
         p_movement_id: input.movementId,
@@ -186,6 +187,12 @@ export class SupabaseDataSource implements DataSource {
         p_scanned_chassis_no: input.scannedChassisNo,
         p_container_attempt_id: input.containerAttemptId ?? null,
         p_chassis_attempt_id: input.chassisAttemptId ?? null,
+        p_gps_lat: gps?.lat ?? null,
+        p_gps_lng: gps?.lng ?? null,
+        p_gps_accuracy_m: gps?.accuracy ?? null,
+        p_gps_denied: gps === null,
+        p_completed_at_device: new Date().toISOString(),
+        p_app_version: __APP_VERSION__,
         p_commit: input.commit ?? true,
       }),
     )

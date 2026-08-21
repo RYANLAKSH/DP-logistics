@@ -16,3 +16,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Build stamp, injected by Vite. See `define` in vite.config.ts. */
+declare const __APP_VERSION__: string
