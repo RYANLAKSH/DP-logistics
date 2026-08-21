@@ -22,6 +22,12 @@ export interface ScanSubmission {
   scannedChassisNo: string
   /** Client-generated. The idempotency key for the whole movement. */
   movementId: string
+  /**
+   * false runs the identical server-side decision WITHOUT recording the
+   * movement, so the driver sees VERIFIED before asserting the vehicle has
+   * physically been moved. A block is recorded either way.
+   */
+  commit?: boolean
 }
 
 export interface ExceptionSubmission {
@@ -43,6 +49,8 @@ export interface DataSource {
   listMyAssignments(): Promise<Assignment[]>
   getAssignment(id: string): Promise<Assignment | null>
   verifyMovement(input: ScanSubmission): Promise<VerificationResult>
+  /** The next assignment this driver is permitted to work, or null. */
+  nextAssignment(): Promise<Assignment | null>
   raiseException(input: ExceptionSubmission): Promise<ExceptionRecord>
   listMyMovements(): Promise<MovementEvent[]>
 

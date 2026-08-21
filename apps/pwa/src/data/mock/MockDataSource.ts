@@ -9,6 +9,7 @@
 import type {
   DataSource, ExceptionSubmission, ScanSubmission,
 } from '../DataSource'
+import { pickNextAssignment } from '../nextAssignment'
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationOutcome,
@@ -100,6 +101,10 @@ export class MockDataSource implements DataSource {
     return delay(snapshot(sorted))
   }
 
+  async nextAssignment(): Promise<Assignment | null> {
+    return delay(snapshot(pickNextAssignment(this.assignments)))
+  }
+
   async getAssignment(id: string): Promise<Assignment | null> {
     return delay(snapshot(this.assignments.find((a) => a.id === id) ?? null))
   }
@@ -159,6 +164,14 @@ export class MockDataSource implements DataSource {
 
     if (a.status === 'COMPLETED') return delay(blocked('ALREADY_COMPLETED'))
 
+    const earlierStillOpen = this.assignments.some(
+      (other) =>
+        other.containerId === a.containerId &&
+        other.sequenceNo < a.sequenceNo &&
+        (other.status === 'PENDING' || other.status === 'IN_PROGRESS'),
+    )
+    if (earlierStillOpen) return delay(blocked('OUT_OF_SEQUENCE'))
+
     if (scannedContainer !== expectedContainer) {
       const onManifest = this.assignments.some(
         (x) => normalize(x.containerNo) === scannedContainer,
@@ -189,6 +202,17 @@ export class MockDataSource implements DataSource {
           containerCapacity: a.expectedVehicleCount,
         }),
       )
+    }
+
+    // A check runs the identical decision and records nothing.
+    if (input.commit === false) {
+      return delay({
+        outcome: 'MATCH' as const,
+        status: 'READY_TO_CONFIRM' as const,
+        containerFilled: a.containerFilled,
+        containerCapacity: a.expectedVehicleCount,
+        ...base,
+      })
     }
 
     a.status = 'COMPLETED'

@@ -8,6 +8,7 @@ import { SlotDots } from '@/components/Progress'
 import { ErrorState, Spinner } from '@/components/States'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
+import { EmptyState } from '@/components/States'
 import { useScanDraft } from '@/lib/scanDraft'
 
 /**
@@ -26,6 +27,16 @@ export function PickupDetailPage() {
     queryFn: () => data.getAssignment(assignmentId),
   })
 
+  // Deep links exist (a manager can send one), so the screen has to refuse a
+  // task that is not this driver's next. The server refuses it too — this
+  // saves the driver a walk to the wrong vehicle first.
+  const { data: next } = useQuery({
+    queryKey: ['driver', 'next'],
+    queryFn: () => data.nextAssignment(),
+  })
+  const outOfTurn = Boolean(next && assignment && next.id !== assignment.id
+                            && assignment.status !== 'COMPLETED')
+
   const bothScanned = Boolean(draft.containerValue && draft.chassisValue)
 
   return (
@@ -33,7 +44,19 @@ export function PickupDetailPage() {
       {isLoading && <Spinner />}
       {error && <ErrorState detail="Could not load this task." onRetry={() => void refetch()} />}
 
-      {assignment && (
+      {assignment && outOfTurn && (
+        <EmptyState
+          title="This is not your next vehicle"
+          detail={`Load ${next!.chassisNo} into ${next!.containerNo} first. Vehicles are loaded in order; if you cannot take that one, open it and report why.`}
+          action={
+            <Link to={`/driver/pickup/${next!.id}`}>
+              <Button>Go to the next vehicle</Button>
+            </Link>
+          }
+        />
+      )}
+
+      {assignment && !outOfTurn && (
         <div className="space-y-4">
           <Card className="border-2 border-ink-900">
             <div className="mb-4 flex items-center justify-between">

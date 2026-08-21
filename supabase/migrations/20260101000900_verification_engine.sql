@@ -379,7 +379,11 @@ create or replace function public.verify_movement(
   p_gps_accuracy_m       real default null,
   p_gps_denied           boolean default false,
   p_completed_at_device  timestamptz default now(),
-  p_app_version          text default null
+  p_app_version          text default null,
+  -- false runs the identical decision without recording the movement, so the
+  -- driver can see VERIFIED before asserting the vehicle has physically been
+  -- moved. A block is recorded either way: a blocked attempt is evidence.
+  p_commit               boolean default true
 )
 returns jsonb
 language plpgsql
@@ -506,6 +510,22 @@ begin
                    and me.status in ('COMPLETED', 'OVERRIDDEN')) then
     v_outcome := 'ALREADY_COMPLETED';
 
+  elsif exists (
+      select 1
+        from public.vehicle_assignments earlier
+       where earlier.container_id = c.id
+         and earlier.sequence_no < a.sequence_no
+         and earlier.status not in ('COMPLETED', 'CANCELLED', 'EXCEPTION')
+         and not exists (select 1 from public.movement_events me2
+                          where me2.assignment_id = earlier.id
+                            and me2.status in ('COMPLETED', 'OVERRIDDEN'))
+    ) then
+    -- Slots are filled in order: where a vehicle sits inside a container is
+    -- not arbitrary. A driver who genuinely cannot take the earlier vehicle
+    -- raises an exception, which parks that assignment and opens this one.
+    -- That is the manager-authorised skip, and it leaves a record.
+    v_outcome := 'OUT_OF_SEQUENCE';
+
   elsif v_container is null or v_chassis is null
         or p_container_attempt_id is null or p_chassis_attempt_id is null
         or not exists (select 1 from public.verification_attempts va
@@ -576,7 +596,10 @@ begin
                    else 'FAIL_RULE' end;
 
   ------------------------------------------------------- record the attempt
-  -- Written whether it passed or failed. A blocked attempt is evidence.
+  -- Every failure is recorded, because a blocked attempt is evidence. A
+  -- passing non-committing check is not: it would double the attempt rows for
+  -- every successful movement and tell the audit nothing new.
+  if v_outcome <> 'MATCH' or p_commit then
   insert into public.verification_attempts (
     id, org_id, yard_id, manifest_id, assignment_id, driver_id, device_id,
     kind, result, outcome,
@@ -591,6 +614,7 @@ begin
     p_client_outcome, p_gps_lat, p_gps_lng, p_gps_accuracy_m, p_gps_denied,
     p_completed_at_device, p_app_version
   );
+  end if;
 
   ------------------------------------------------------------------ on failure
   if v_outcome <> 'MATCH' then
@@ -609,6 +633,7 @@ begin
         when 'DEVICE_NOT_APPROVED'       then 'DEVICE_UNAPPROVED'::public.exception_type
         when 'MANIFEST_NOT_PUBLISHED'    then 'MANIFEST_ERROR'::public.exception_type
         when 'MANIFEST_SUPERSEDED'       then 'MANIFEST_CONFLICT'::public.exception_type
+        when 'OUT_OF_SEQUENCE'           then 'OTHER'::public.exception_type
         else 'OTHER'::public.exception_type
       end,
       case when v_outcome in ('WRONG_VEHICLE', 'WRONG_CONTAINER') then 1 else 2 end,
@@ -641,6 +666,25 @@ begin
       'scanned_container_no', v_container,
       'scanned_chassis_no', v_chassis,
       'detail', v_detail,
+      'replayed', false
+    );
+  end if;
+
+  ------------------------------------------------- a check that has not committed
+  if not p_commit then
+    select count(*) into v_filled
+      from public.movement_events me
+      join public.vehicle_assignments va5 on va5.id = me.assignment_id
+     where va5.container_id = c.id and me.status in ('COMPLETED', 'OVERRIDDEN');
+
+    return jsonb_build_object(
+      'outcome', 'MATCH',
+      'status', 'READY_TO_CONFIRM',
+      'movement_id', null,
+      'container_no', v_exp_container,
+      'chassis_no', v_exp_chassis,
+      'container_filled', v_filled,
+      'container_capacity', c.expected_vehicle_count,
       'replayed', false
     );
   end if;
@@ -705,7 +749,8 @@ revoke all on function public.record_scan_attempt(
   text, double precision, double precision, real, boolean, timestamptz, text) from public;
 revoke all on function public.verify_movement(
   uuid, uuid, text, text, uuid, uuid, uuid, text, verification_outcome,
-  double precision, double precision, real, boolean, timestamptz, text) from public;
+  double precision, double precision, real, boolean, timestamptz, text,
+  boolean) from public;
 
 grant execute on function public.approve_device(uuid) to authenticated;
 grant execute on function public.revoke_device(uuid, text) to authenticated;
@@ -715,4 +760,5 @@ grant execute on function public.record_scan_attempt(
   text, double precision, double precision, real, boolean, timestamptz, text) to authenticated;
 grant execute on function public.verify_movement(
   uuid, uuid, text, text, uuid, uuid, uuid, text, verification_outcome,
-  double precision, double precision, real, boolean, timestamptz, text) to authenticated;
+  double precision, double precision, real, boolean, timestamptz, text,
+  boolean) to authenticated;

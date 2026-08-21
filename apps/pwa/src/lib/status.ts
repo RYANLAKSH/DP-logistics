@@ -87,4 +87,6 @@ export const OUTCOME_MESSAGE: Record<string, string> = {
   DEVICE_NOT_APPROVED: 'This device has not been approved. Ask your manager.',
   EVIDENCE_MISSING: 'Both photographs are required before a movement can complete.',
   REPLAY_CONFLICT: 'This movement was already recorded with different values.',
+  OUT_OF_SEQUENCE:
+    'An earlier vehicle for this container has not been loaded yet. Load it first, or report why you cannot.',
 }

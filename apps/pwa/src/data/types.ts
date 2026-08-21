@@ -91,10 +91,11 @@ export type VerificationOutcome =
   | 'DEVICE_NOT_APPROVED'
   | 'EVIDENCE_MISSING'
   | 'REPLAY_CONFLICT'
+  | 'OUT_OF_SEQUENCE'
 
 export interface VerificationResult {
   outcome: VerificationOutcome
-  status: 'COMPLETED' | 'BLOCKED' | 'PENDING_SYNC'
+  status: 'COMPLETED' | 'BLOCKED' | 'PENDING_SYNC' | 'READY_TO_CONFIRM'
   movementId?: string
   exceptionId?: string
   expectedContainerNo: string

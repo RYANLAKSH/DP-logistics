@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
 import { dateLong } from '@/lib/format'
+import { pickNextAssignment } from '@/data/nextAssignment'
 import { useSession, useSignOut } from '@/lib/session'
 
 export function DriverHomePage() {
@@ -24,7 +25,9 @@ export function DriverHomePage() {
   const done = assignments?.filter((a) => a.status === 'COMPLETED').length ?? 0
   const blocked = assignments?.filter((a) => a.status === 'EXCEPTION').length ?? 0
   const pending = total - done - blocked
-  const next = assignments?.find((a) => a.status === 'PENDING' || a.status === 'IN_PROGRESS')
+  // The driver does not pick. Work is handed out one at a time, in loading
+  // order, skipping anything parked by an exception.
+  const next = pickNextAssignment(assignments ?? [])
 
   return (
     <DriverShell
@@ -107,28 +110,40 @@ export function DriverHomePage() {
             <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-ink-600">
               Remaining today
             </h2>
+            {/* Shown, not offered. Tasks are handed out in order — a driver who
+                could pick from this list could pick the wrong vehicle, which is
+                the first risk the product exists to remove. */}
             <ul className="space-y-2">
               {assignments
                 .filter((a) => a.status !== 'COMPLETED')
                 .map((a) => (
-                  <li key={a.id}>
-                    <Link
-                      to={`/driver/pickup/${a.id}`}
-                      className="flex items-center gap-3 rounded-card border border-line/25
-                                 bg-white p-3 hover:border-ink-900"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <CodeValue value={a.containerNo} size="sm" />
-                        <CodeValue value={a.chassisNo} size="sm" />
-                      </div>
-                      <StatusBadge
-                        status={a.status === 'EXCEPTION' ? 'EXCEPTION' : 'PENDING'}
-                        size="sm"
-                      />
-                    </Link>
+                  <li
+                    key={a.id}
+                    className={`flex items-center gap-3 rounded-card border p-3 ${
+                      a.id === next?.id
+                        ? 'border-ink-900 bg-white'
+                        : 'border-line/25 bg-white/60'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <CodeValue value={a.containerNo} size="sm" />
+                      <CodeValue value={a.chassisNo} size="sm" />
+                    </div>
+                    <StatusBadge
+                      status={
+                        a.status === 'EXCEPTION' ? 'EXCEPTION'
+                        : a.id === next?.id ? 'READY'
+                        : 'PENDING'
+                      }
+                      size="sm"
+                    />
                   </li>
                 ))}
             </ul>
+            <p className="mt-2 text-sm text-ink-600">
+              Vehicles are loaded in this order. If you cannot take the next one, open it
+              and report why — the one after it will then be released to you.
+            </p>
           </section>
 
           <Link to="/driver/completed" className="block">

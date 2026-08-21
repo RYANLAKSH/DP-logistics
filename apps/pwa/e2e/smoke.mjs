@@ -59,6 +59,12 @@ await page.waitForSelector('text=VERIFIED', { timeout: 10000 })
 await shot('05-verified')
 const verified = await page.textContent('body')
 
+// Nothing is recorded until the driver confirms the vehicle physically moved.
+const confirmVisible = await page.isVisible('button:has-text("Confirm vehicle moved")')
+await page.click('button:has-text("Confirm vehicle moved")')
+await page.waitForSelector('button:has-text("Next pickup")', { timeout: 10000 })
+await shot('05b-moved')
+
 // --- driver mismatch path --------------------------------------------------
 await page.click('text=Next pickup')
 await page.waitForURL('**/driver')
@@ -74,6 +80,8 @@ await page.waitForSelector('text=Detected')
 await page.click('button:has-text("Confirm")')
 await page.click('button:has-text("Verify vehicle")')
 await page.waitForSelector('text=DO NOT LOAD', { timeout: 10000 })
+const blockedHasNoConfirm =
+  !(await page.isVisible('button:has-text("Confirm vehicle moved")'))
 await shot('06-blocked')
 const blocked = await page.textContent('body')
 
@@ -133,6 +141,8 @@ const report = {
   verifiedShown: verified.includes('VERIFIED'),
   blockedShown: blocked.includes('DO NOT LOAD'),
   namesOtherContainer: blocked.includes('assigned to container'),
+  confirmStepShown: confirmVisible,
+  blockedOffersNoConfirm: blockedHasNoConfirm,
   secondTaskIsNotTheFirst: !blocked.includes('This vehicle has already been moved'),
   secondChassis,
   managerBlockedFromAdminRoute: true,

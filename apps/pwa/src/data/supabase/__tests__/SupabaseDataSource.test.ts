@@ -47,6 +47,7 @@ describe('verifyMovement', () => {
       p_assignment_id: 'a1',
       p_scanned_container_no: 'CULVNSA2601795',
       p_scanned_chassis_no: 'MAT752389T7R19810',
+      p_commit: true,
     })
 
     // The security property, asserted directly: a client that could send an
@@ -55,6 +56,21 @@ describe('verifyMovement', () => {
     expect(keys.some((k) => k.includes('expected'))).toBe(false)
     expect(keys.some((k) => k.includes('outcome'))).toBe(false)
     expect(keys.some((k) => k.includes('status'))).toBe(false)
+  })
+
+  it('defaults to committing, and passes a check through explicitly', async () => {
+    const { client, rpc } = fakeClient()
+    rpc.mockResolvedValue({ data: { outcome: 'MATCH', status: 'COMPLETED' }, error: null })
+    const ds = new SupabaseDataSource(client)
+    const base = {
+      assignmentId: 'a1', scannedContainerNo: 'C', scannedChassisNo: 'H', movementId: 'm',
+    }
+
+    await ds.verifyMovement(base)
+    expect(rpc.mock.calls[0]![1].p_commit).toBe(true)
+
+    await ds.verifyMovement({ ...base, commit: false })
+    expect(rpc.mock.calls[1]![1].p_commit).toBe(false)
   })
 
   it('passes the client-generated movement id through as the idempotency key', async () => {

@@ -12,6 +12,7 @@ import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
 } from '../types'
+import { pickNextAssignment } from '../nextAssignment'
 import { getSupabase } from './client'
 
 /** Shape of the me() RPC. */
@@ -124,9 +125,15 @@ export class SupabaseDataSource implements DataSource {
         p_assignment_id: input.assignmentId,
         p_scanned_container_no: input.scannedContainerNo,
         p_scanned_chassis_no: input.scannedChassisNo,
+        p_commit: input.commit ?? true,
       }),
     )
     return toVerificationResult(data as Record<string, unknown>)
+  }
+
+  async nextAssignment(): Promise<Assignment | null> {
+    const all = await this.listMyAssignments()
+    return pickNextAssignment(all)
   }
 
   async raiseException(input: ExceptionSubmission): Promise<ExceptionRecord> {

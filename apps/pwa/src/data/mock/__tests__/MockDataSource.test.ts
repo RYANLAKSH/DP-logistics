@@ -132,3 +132,81 @@ describe('MockDataSource.verifyMovement', () => {
     expect(siblings.every((s) => s.containerFilled === a.containerFilled + 1)).toBe(true)
   })
 })
+
+describe('sequential workflow', () => {
+  let ds: MockDataSource
+  beforeEach(() => { ds = new MockDataSource() })
+
+  it('blocks a vehicle whose earlier slot is still open', async () => {
+    const all = await ds.listMyAssignments()
+    const slot1 = all.find((a) => a.status === 'PENDING' && a.sequenceNo === 1)!
+    const slot2 = all.find(
+      (a) => a.containerId === slot1.containerId && a.sequenceNo === 2,
+    )!
+
+    const r = await ds.verifyMovement({
+      assignmentId: slot2.id,
+      scannedContainerNo: slot2.containerNo,
+      scannedChassisNo: slot2.chassisNo,
+      movementId: 'seq-1',
+    })
+    expect(r.outcome).toBe('OUT_OF_SEQUENCE')
+    expect(r.status).toBe('BLOCKED')
+  })
+
+  it('a check verifies without recording anything', async () => {
+    const all = await ds.listMyAssignments()
+    const a = all.find((x) => x.status === 'PENDING' && x.sequenceNo === 1)!
+
+    const check = await ds.verifyMovement({
+      assignmentId: a.id,
+      scannedContainerNo: a.containerNo,
+      scannedChassisNo: a.chassisNo,
+      movementId: 'chk-1',
+      commit: false,
+    })
+    expect(check.outcome).toBe('MATCH')
+    expect(check.status).toBe('READY_TO_CONFIRM')
+    expect(check.movementId).toBeUndefined()
+
+    // Nothing changed: the task is still workable and no movement exists.
+    const after = await ds.getAssignment(a.id)
+    expect(after?.status).toBe('PENDING')
+    expect(await ds.listMyMovements()).not.toContainEqual(
+      expect.objectContaining({ id: 'chk-1' }),
+    )
+  })
+
+  it('confirming after a check records exactly one movement', async () => {
+    const all = await ds.listMyAssignments()
+    const a = all.find((x) => x.status === 'PENDING' && x.sequenceNo === 1)!
+    const input = {
+      assignmentId: a.id,
+      scannedContainerNo: a.containerNo,
+      scannedChassisNo: a.chassisNo,
+      movementId: 'confirm-1',
+    }
+    await ds.verifyMovement({ ...input, commit: false })
+    const committed = await ds.verifyMovement({ ...input, commit: true })
+
+    expect(committed.status).toBe('COMPLETED')
+    expect((await ds.getAssignment(a.id))?.status).toBe('COMPLETED')
+    const movements = await ds.listMyMovements()
+    expect(movements.filter((m) => m.id === 'confirm-1')).toHaveLength(1)
+  })
+
+  it('a blocked check still records the block', async () => {
+    const all = await ds.listMyAssignments()
+    const a = all.find((x) => x.status === 'PENDING' && x.sequenceNo === 1)!
+    const before = (await ds.listExceptions('yard-nsa')).length
+
+    await ds.verifyMovement({
+      assignmentId: a.id,
+      scannedContainerNo: 'CULVNSA0000000',
+      scannedChassisNo: a.chassisNo,
+      movementId: 'blk-1',
+      commit: false,
+    })
+    expect((await ds.listExceptions('yard-nsa')).length).toBe(before + 1)
+  })
+})

@@ -60,7 +60,8 @@ create type verification_outcome as enum (
   'DRIVER_NOT_AUTHORISED',
   'DEVICE_NOT_APPROVED',
   'EVIDENCE_MISSING',
-  'REPLAY_CONFLICT'           -- same movement id resubmitted with different values
+  'REPLAY_CONFLICT',          -- same movement id resubmitted with different values
+  'OUT_OF_SEQUENCE'           -- an earlier slot in this container is still open
 );
 
 create type exception_type as enum (
