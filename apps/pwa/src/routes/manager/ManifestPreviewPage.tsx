@@ -10,6 +10,15 @@ import { Table, Td } from '@/components/Table'
 import { useData } from '@/data/provider'
 
 /**
+ * Messages arrive as `CODE: human sentence`. The code is for grouping and for
+ * the audit trail; the sentence is what an administrator reads at 6am.
+ */
+function describe(message: string): string {
+  const at = message.indexOf(': ')
+  return at === -1 ? message : message.slice(at + 2)
+}
+
+/**
  * Preview, then publish. Never both in one action.
  *
  * The manager sees every rejected row and its reason before anything becomes
@@ -37,6 +46,7 @@ export function ManifestPreviewPage() {
   }
 
   const blocked = (imported?.rejectedCount ?? 0) > 0
+  const warningCount = imported?.rows.filter((r) => r.warnings.length > 0).length ?? 0
 
   return (
     <ManagerShell
@@ -79,26 +89,49 @@ export function ManifestPreviewPage() {
             </div>
           )}
 
+          {warningCount > 0 && (
+            <div className="rounded-card border-2 border-warn-500 bg-warn-100 px-4 py-3">
+              <p className="font-semibold text-warn-500">
+                {warningCount} row{warningCount === 1 ? '' : 's'} worth a second look
+              </p>
+              <p className="mt-1 text-sm text-ink-700">
+                These do not block publishing. Check them anyway — an unusual vehicle
+                count is often a missing line rather than a genuine exception.
+              </p>
+            </div>
+          )}
+
           <Card>
             <CardHeader title="Rows" subtitle="Every row, with its reason for rejection" />
             <Table headers={['#', 'Container', 'Chassis', 'Seq', 'Status']}>
               {imported.rows.map((row) => (
                 <tr key={row.rowNo} className={row.errors.length ? 'bg-bad-100/40' : ''}>
                   <Td className="code text-ink-600">{row.rowNo}</Td>
-                  <Td className="code">{row.containerNo || <em className="text-bad-500">missing</em>}</Td>
-                  <Td className="code">{row.chassisNo || <em className="text-bad-500">missing</em>}</Td>
+                  <Td className="code">
+                    {row.containerNo || <em className="text-bad-500">missing</em>}
+                  </Td>
+                  <Td className="code">
+                    {row.chassisNo || <em className="text-bad-500">missing</em>}
+                  </Td>
                   <Td className="code">{row.sequenceNo ?? '—'}</Td>
                   <Td>
-                    {row.errors.length === 0 ? (
-                      <StatusBadge status="READY" size="sm" />
-                    ) : (
-                      <div className="space-y-1">
-                        <StatusBadge status="EXCEPTION" size="sm" />
-                        {row.errors.map((e) => (
-                          <p key={e} className="text-xs text-bad-500">{e}</p>
-                        ))}
-                      </div>
-                    )}
+                    <div className="space-y-1">
+                      <StatusBadge
+                        status={row.errors.length ? 'EXCEPTION' : 'READY'}
+                        size="sm"
+                      />
+                      {row.errors.map((e) => (
+                        <p key={e} className="text-xs font-medium text-bad-500">
+                          {describe(e)}
+                        </p>
+                      ))}
+                      {/* Warnings never block. A container with three vehicles
+                          is unusual, not wrong, and blocking it would make the
+                          product unusable the first time it happens. */}
+                      {row.warnings.map((w) => (
+                        <p key={w} className="text-xs text-warn-500">{describe(w)}</p>
+                      ))}
+                    </div>
                   </Td>
                 </tr>
               ))}

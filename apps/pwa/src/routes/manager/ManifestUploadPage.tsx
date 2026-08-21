@@ -35,9 +35,14 @@ export function ManifestUploadPage() {
   async function onParse() {
     if (!file) return
     setBusy(true)
+    setError(null)
     try {
       const imported = await data.parseManifestFile(file, 'yard-nsa', date)
       navigate(`/manager/manifests/import/${imported.id}`)
+    } catch (e) {
+      // A parse failure has to say what went wrong. "Upload failed" leaves an
+      // administrator with a file they cannot fix and a yard that cannot start.
+      setError(e instanceof Error ? e.message : 'That file could not be parsed.')
     } finally {
       setBusy(false)
     }

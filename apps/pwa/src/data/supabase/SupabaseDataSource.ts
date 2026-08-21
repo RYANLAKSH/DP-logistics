@@ -246,8 +246,88 @@ export class SupabaseDataSource implements DataSource {
     return data ? toManifestImport(data as ImportRow) : null
   }
 
-  async parseManifestFile(): Promise<ManifestImport> {
-    throw new Error('Manifest parsing arrives in phase 5')
+  /**
+   * Upload, then ask the server to parse.
+   *
+   * The client hashes the file, asks for a path (it never chooses one), uploads
+   * it, records the import, and invokes parse-manifest. It cannot write
+   * `parsed_rows` — that column is not in its grant — so what becomes live is
+   * always the server's reading of the file the manager uploaded.
+   */
+  async parseManifestFile(
+    file: File, yardId: string, operatingDate: string,
+  ): Promise<ManifestImport> {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const digest = await crypto.subtle.digest('SHA-256', bytes)
+    const sha256 = [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, '0')).join('')
+
+    const extension = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
+    const path = unwrap(
+      await this.db.rpc('create_manifest_upload_path', {
+        p_yard_id: yardId,
+        p_operating_date: operatingDate,
+        p_file_sha256: sha256,
+        p_extension: extension,
+      }),
+    ) as unknown as string
+
+    const upload = await this.db.storage
+      .from('manifests')
+      .upload(path, file, { upsert: true, contentType: file.type || 'text/csv' })
+    if (upload.error) throw new Error(upload.error.message)
+
+    const inserted = unwrap(
+      await this.db.from('manifest_imports').insert({
+        org_id: (await this.requireProfile()).orgId,
+        yard_id: yardId,
+        operating_date: operatingDate,
+        file_name: file.name,
+        file_path: path,
+        file_sha256: sha256,
+        file_bytes: file.size,
+        uploaded_by: (await this.requireProfile()).id,
+      }).select('id').single(),
+    ) as { id: string }
+
+    const { data, error } = await this.db.functions.invoke('parse-manifest', {
+      body: { importId: inserted.id },
+    })
+    if (error) throw new Error(await readFunctionError(error))
+
+    const parsed = data as {
+      rowCount: number; validCount: number; rejectedCount: number
+      rows: Array<{
+        row_no: number; container_no: string; chassis_no: string
+        sequence_no: number | null; errors: string[]; warnings: string[]
+      }>
+    }
+
+    return {
+      id: inserted.id,
+      yardId,
+      operatingDate,
+      fileName: file.name,
+      rowCount: parsed.rowCount,
+      validCount: parsed.validCount,
+      rejectedCount: parsed.rejectedCount,
+      rows: parsed.rows.map((r) => ({
+        rowNo: r.row_no,
+        containerNo: r.container_no,
+        chassisNo: r.chassis_no,
+        sequenceNo: r.sequence_no,
+        errors: r.errors,
+        warnings: r.warnings,
+      })),
+    }
+  }
+
+  private cachedProfile: Profile | null = null
+
+  private async requireProfile(): Promise<Profile> {
+    this.cachedProfile ??= await this.currentProfile()
+    if (!this.cachedProfile) throw new Error('not signed in')
+    return this.cachedProfile
   }
 
   async publishManifestImport(importId: string): Promise<Manifest> {
@@ -456,4 +536,23 @@ export function toVerificationResult(raw: Record<string, unknown>): Verification
       (detail.scanned_vehicle_belongs_to_container as string) ?? undefined,
     bayPosition: (detail.bay_position as string) ?? undefined,
   }
+}
+
+/**
+ * Edge Function errors arrive as an opaque FunctionsHttpError whose useful
+ * detail is in the response body. Without reading it the manager sees
+ * "Edge Function returned a non-2xx status code", which tells them nothing
+ * about which row of their file is wrong.
+ */
+async function readFunctionError(error: unknown): Promise<string> {
+  const withContext = error as { context?: Response; message?: string }
+  try {
+    if (withContext.context && typeof withContext.context.json === 'function') {
+      const body = await withContext.context.json()
+      if (body?.error) return String(body.error)
+    }
+  } catch {
+    // Fall through to the generic message.
+  }
+  return withContext.message ?? 'The manifest could not be parsed.'
 }

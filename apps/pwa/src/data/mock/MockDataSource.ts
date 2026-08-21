@@ -15,6 +15,9 @@ import type {
   VerificationResult, Yard,
 } from '../types'
 import {
+  detectColumns, findHeaderRow, isUsableMapping, parseDelimited, validateRows,
+} from '@shared/manifest/index.ts'
+import {
   ACTIVITY, ASSIGNMENTS, AUDIT, EXCEPTIONS, MANIFESTS, MOVEMENTS,
   SAMPLE_IMPORT, USERS, YARDS,
 } from './fixtures'
@@ -52,6 +55,7 @@ export class MockDataSource implements DataSource {
   private activity: ActivityItem[] = ACTIVITY.map((a) => ({ ...a }))
   private manifests: Manifest[] = MANIFESTS.map((m) => ({ ...m }))
   private profile: Profile | null = null
+  private lastImport: ManifestImport | null = null
 
   constructor() {
     const stored = globalThis.localStorage?.getItem(SESSION_KEY)
@@ -292,13 +296,57 @@ export class MockDataSource implements DataSource {
   }
 
   async getManifestImport(id: string): Promise<ManifestImport | null> {
+    if (this.lastImport?.id === id) return delay(snapshot(this.lastImport))
     return delay(id === SAMPLE_IMPORT.id ? snapshot(SAMPLE_IMPORT) : null)
   }
 
+  /**
+   * Runs the REAL parser and the REAL validation rules, in the browser.
+   *
+   * In production this happens in the parse-manifest Edge Function, because
+   * `parsed_rows` is what becomes live assignments and no client may write it.
+   * Here it runs locally so the preview screen is exercised against the actual
+   * rules rather than a second implementation that would drift from them.
+   */
   async parseManifestFile(
     file: File, yardId: string, date: string,
   ): Promise<ManifestImport> {
-    return delay({ ...SAMPLE_IMPORT, fileName: file.name, yardId, operatingDate: date })
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      // Spreadsheet decoding lives in the Edge Function. Falling back to the
+      // fixture keeps the demo usable without pretending to parse XLSX here.
+      return delay({ ...SAMPLE_IMPORT, fileName: file.name, yardId, operatingDate: date })
+    }
+
+    const text = await file.text()
+    const grid = parseDelimited(text)
+    const headerRow = findHeaderRow(grid)
+    const map = headerRow >= 0 ? detectColumns(grid[headerRow]!) : {}
+
+    if (!isUsableMapping(map)) {
+      throw new Error(
+        'Could not find a container column and a chassis column in that file.',
+      )
+    }
+
+    const result = validateRows(grid.slice(headerRow + 1), map, { operatingDate: date })
+    this.lastImport = {
+      id: SAMPLE_IMPORT.id,
+      yardId,
+      operatingDate: date,
+      fileName: file.name,
+      rowCount: result.rowCount,
+      validCount: result.validCount,
+      rejectedCount: result.rejectedCount,
+      rows: result.rows.map((r) => ({
+        rowNo: r.row_no,
+        containerNo: r.container_no,
+        chassisNo: r.chassis_no,
+        sequenceNo: r.sequence_no,
+        errors: r.errors,
+        warnings: r.warnings,
+      })),
+    }
+    return delay(snapshot(this.lastImport))
   }
 
   async publishManifestImport(importId: string): Promise<Manifest> {

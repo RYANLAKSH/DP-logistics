@@ -40,7 +40,14 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // The manifest parser lives with the Edge Functions so the Supabase CLI
+      // bundles it. The mock backend imports it so the preview screen is
+      // exercised against the real validation rules rather than a second
+      // implementation that would drift.
+      '@shared': fileURLToPath(new URL('../../supabase/functions/_shared', import.meta.url)),
+    },
     // The repo still contains packages/mobile from the superseded Expo
     // direction, which pins React 18 and hoists it to the workspace root.
     // Without deduping, dependencies hoisted to the root resolve React 18
