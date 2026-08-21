@@ -45,7 +45,7 @@ The journey the product lives or dies on. Target: under 60 seconds, two scans, f
        │              ✓                     │
        │           VERIFIED                 │
        │  Load MAT448291PJ1234              │
-       │  into MSKU4512345                  │
+       │  into MSKU4512340                  │
        │                                    │
        │  Container slot 1 of 2 filled      │
        │  Next: chassis MAT448300PJ5678     │
@@ -79,12 +79,12 @@ This is the journey that justifies the project.
        │              ✕                     │
        │         DO NOT LOAD                │
        │                                    │
-       │  Container  MSKU4512345            │
+       │  Container  MSKU4512340            │
        │  expects    MAT448291PJ1234        │
        │  You scanned MAT447102PJ9981       │
        │                                    │
        │  That vehicle is assigned to       │
-       │  container TGHU7781234 (Bay A).    │
+       │  container TGHU7781237 (Bay A).    │
        │                                    │
        │  Supervisor notified.              │
        │  [ Rescan vehicle ]                │
@@ -137,7 +137,7 @@ An exception arrives
                                  recorded as such.
 
 End of shift
-  → Any container with a partially filled complement is flagged: "MSKU4512345 has 1 of 2
+  → Any container with a partially filled complement is flagged: "MSKU4512340 has 1 of 2
     vehicles". This is the report that catches the error nobody noticed.
 ```
 
@@ -159,7 +159,7 @@ nice-to-have.
 
        ✕ Row 31  Container MSKU4512340 — check digit invalid (expected 5)
        ✕ Row 47  Chassis blank
-       ⚠ Row 12  Container TGHU7781234 has 3 vehicles (unusual, not blocked)
+       ⚠ Row 12  Container TGHU7781237 has 3 vehicles (unusual, not blocked)
 
 5. Fix at source and re-upload, or commit with the rejected rows excluded.
 6. Commit → manifest v1 becomes active → drivers' devices pick it up on next sync.
@@ -174,7 +174,7 @@ admin is shown the blast radius:
    6 assignments changed.
    → 2 of them have movements ALREADY VERIFIED against v1:
 
-       MSKU4512345 / MAT448291PJ1234  verified 09:14 by R. Kumar
+       MSKU4512340 / MAT448291PJ1234  verified 09:14 by R. Kumar
          v2 assigns this container to MAT449900PJ0001
 
    Committing will re-verify these movements against v2. Outcomes may change
@@ -194,7 +194,7 @@ A customer claims their vehicle arrived in the wrong container.
   → Timeline for that vehicle:
 
       21 Aug 09:11  Task issued        manifest v1 line 15
-      21 Aug 09:13  Container scanned  MSKU4512345  OCR conf 0.97  [photo]
+      21 Aug 09:13  Container scanned  MSKU4512340  OCR conf 0.97  [photo]
       21 Aug 09:14  Chassis scanned    MAT448291PJ1234  conf 0.88  [photo]
       21 Aug 09:14  VERIFIED           server, against manifest v1
                       device 4f2a… · driver R. Kumar · 18.9481N 72.9214E

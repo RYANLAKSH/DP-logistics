@@ -163,9 +163,9 @@ and by email:
 NHAVA SHEVA · 21 Aug · shift close
 
   ⚠ 3 containers partially loaded
-      TGHU7781234   1 of 2   missing MAT449900PJ0001
-      CAIU2298761   1 of 2   missing MAT450012PJ7788
-      MSCU9087612   0 of 2   not started
+      TGHU7781237   1 of 2   missing MAT449900PJ0001
+      CAIU2298766   1 of 2   missing MAT450012PJ7788
+      MSCU9087610   0 of 2   not started
 
   ⚠ 2 movements pending sync for more than 4 hours   (drivers: S. Patel)
   ⚠ 1 exception open for 6 hours

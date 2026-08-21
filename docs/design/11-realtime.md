@@ -71,14 +71,14 @@ notices until a supervisor acts on a number that is wrong.
 │  ▓▓▓▓░░░░░   │  ▓▓▓░░░░░░   │  1 critical  │  1 awaiting device approval│
 ├──────────────┴──────────────┴──────────────┴───────────────────────────┤
 │  CONTAINERS                                                            │
-│  MSKU4512345  ●●   complete    09:14, 09:31   R. Kumar                 │
-│  TGHU7781234  ●○   1 of 2      09:44          S. Patel                 │
-│  CAIU2298761  ○○   pending                                             │
+│  MSKU4512340  ●●   complete    09:14, 09:31   R. Kumar                 │
+│  TGHU7781237  ●○   1 of 2      09:44          S. Patel                 │
+│  CAIU2298766  ○○   pending                                             │
 ├────────────────────────────────────────────────────────────────────────┤
 │  ACTIVITY                                                              │
-│  09:44  S. Patel   verified  MAT4482…  →  TGHU7781234                  │
-│  09:41  R. Kumar   BLOCKED   wrong vehicle  MSKU4512345      [open]    │
-│  09:31  R. Kumar   verified  MAT4483…  →  MSKU4512345                  │
+│  09:44  S. Patel   verified  MAT4482…  →  TGHU7781237                  │
+│  09:41  R. Kumar   BLOCKED   wrong vehicle  MSKU4512340      [open]    │
+│  09:31  R. Kumar   verified  MAT4483…  →  MSKU4512340                  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 

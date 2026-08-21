@@ -6,7 +6,7 @@ This is the specification for `packages/shared-rules`. It runs identically on th
 ## 1. Container number format — ISO 6346
 
 ```
-M S K U   4 5 1 2 3 4   5
+M S K U   4 5 1 2 3 4   0
 └──┬──┘   └────┬────┘   │
 owner    serial (6)     check digit
 + category                (computed from the 10 preceding chars)
@@ -56,7 +56,7 @@ export function isValidContainerNo(input: string): boolean {
 }
 ```
 
-`MSKU4512345` validates; flip any digit and it almost certainly won't. Roughly 10 in 11
+`MSKU4512340` validates; flip any digit and it almost certainly won't. Roughly 10 in 11
 single-character OCR errors are caught here — locally, instantly, for free. Use it in the
 camera loop to filter candidates before you ever show one to the officer.
 
@@ -69,7 +69,7 @@ comparison. Comparing un-normalized strings is the classic source of phantom mis
 export function normalizeContainerNo(raw: string): string {
   return raw
     .toUpperCase()
-    .replace(/[\s\-_.]/g, '')      // "MSKU 451234-5" → "MSKU4512345"
+    .replace(/[\s\-_.]/g, '')      // "MSKU 451234-0" → "MSKU4512340"
     .trim();
 }
 ```
@@ -163,8 +163,8 @@ Row 5 is the whole point of the system. The FAIL screen should be explicit and
 unambiguous:
 
 > **DO NOT LOAD**
-> Container `MSKU4512345` is assigned to chassis `MAT448291PJ1234`
-> You scanned `MAT447102PJ9981` — assigned to container `TGHU7781234`
+> Container `MSKU4512340` is assigned to chassis `MAT448291PJ1234`
+> You scanned `MAT447102PJ9981` — assigned to container `TGHU7781237`
 > Supervisor has been notified.
 
 Row 7 deserves a note: reports sometimes arrive with the vehicle column blank because

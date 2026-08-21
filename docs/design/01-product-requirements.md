@@ -17,8 +17,8 @@ establishes what actually happened, when, or who did it.
 | 2 | Right vehicle, wrong container | Containers in a row look identical; the driver reads the wrong one, or two tasks get transposed. | The physical container number must be scanned and must match the assignment. ISO 6346 check digits reject most misreads locally and instantly. |
 | 3 | No evidence when something goes wrong | Disputes are settled by argument. Nobody can prove which vehicle went into which container. | Every movement stores both photographs, the extracted text, the manifest version verified against, the operator, the device, GPS, and both device and server timestamps — in append-only storage. |
 
-Risk 2 is the one the product exists for. A driver who scans container `MSKU4512345` while
-holding a vehicle assigned to `TGHU7781234` must be stopped at that moment, not audited
+Risk 2 is the one the product exists for. A driver who scans container `MSKU4512340` while
+holding a vehicle assigned to `TGHU7781237` must be stopped at that moment, not audited
 next week.
 
 ## 3. Scope

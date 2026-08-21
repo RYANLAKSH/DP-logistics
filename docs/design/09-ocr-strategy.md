@@ -52,7 +52,7 @@ frame → grayscale → crop to alignment-guide ROI → adaptive threshold → d
       → tesseract (PSM 7 single line, whitelist A-Z0-9)
       → strip separators, uppercase
       → positional confusable repair:  chars 1-4 must be letters, 5-11 must be digits
-           "M5KU4512345" → position 2 must be a letter → 5→S → "MSKU4512345"
+           "M5KU4512345" → position 2 must be a letter → 5→S → "MSKU4512340"
       → ^[A-Z]{4}[0-9]{7}$ ?
       → ISO 6346 check digit valid ?      ← rejects ~10 of 11 single-character errors
       → equal to the expected container ?

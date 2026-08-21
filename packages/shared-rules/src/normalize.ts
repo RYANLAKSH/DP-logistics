@@ -3,7 +3,7 @@
  *
  * Every value is normalized before comparison — OCR output, manual entry, and
  * report ingest alike. Comparing un-normalized strings is the classic source of
- * phantom mismatches ("MSKU 451234-5" vs "MSKU4512345").
+ * phantom mismatches ("MSKU 451234-0" vs "MSKU4512340").
  */
 
 import {
