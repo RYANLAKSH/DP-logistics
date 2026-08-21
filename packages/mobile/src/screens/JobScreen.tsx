@@ -25,7 +25,8 @@ interface Props {
   locationId: string;
   locationName: string;
   officerName: string;
-  onStartScan: () => void;
+  /** Opens the loading checklist for one container. */
+  onOpenContainer: (containerNo: string) => void;
   onSignOut: () => void;
 }
 
@@ -35,7 +36,7 @@ interface ContainerProgress {
   expected: number;
 }
 
-export function JobScreen({ locationId, locationName, officerName, onStartScan, onSignOut }: Props) {
+export function JobScreen({ locationId, locationName, officerName, onOpenContainer, onSignOut }: Props) {
   const [report, setReport] = useState<CachedReport | null>(null);
   const [containers, setContainers] = useState<ContainerProgress[]>([]);
   const [pending, setPending] = useState(0);
@@ -70,6 +71,10 @@ export function JobScreen({ locationId, locationName, officerName, onStartScan, 
 
   const totalLoaded = containers.reduce((sum, entry) => sum + entry.loaded, 0);
   const totalExpected = containers.reduce((sum, entry) => sum + entry.expected, 0);
+
+  // summarize() puts in-progress containers first, so the first incomplete one
+  // is what the officer is most likely reaching for.
+  const nextContainer = containers.find((entry) => entry.loaded < entry.expected)?.containerNo;
 
   return (
     <View style={styles.screen}>
@@ -124,7 +129,13 @@ export function JobScreen({ locationId, locationName, officerName, onStartScan, 
         {containers.map((entry) => {
           const complete = entry.loaded === entry.expected;
           return (
-            <View key={entry.containerNo} style={styles.containerRow}>
+            <Pressable
+              key={entry.containerNo}
+              style={styles.containerRow}
+              onPress={() => onOpenContainer(entry.containerNo)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open checklist for ${entry.containerNo}`}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={styles.containerNo}>{entry.containerNo}</Text>
                 <View style={styles.track}>
@@ -140,7 +151,7 @@ export function JobScreen({ locationId, locationName, officerName, onStartScan, 
               <Text style={[styles.count, complete && styles.countDone]}>
                 {complete ? 'sealed' : `${entry.loaded}/${entry.expected}`}
               </Text>
-            </View>
+            </Pressable>
           );
         })}
 
@@ -169,11 +180,13 @@ export function JobScreen({ locationId, locationName, officerName, onStartScan, 
 
       <View style={styles.actions}>
         <Pressable
-          style={[styles.primaryButton, !report && styles.buttonDisabled]}
-          onPress={onStartScan}
-          disabled={!report}
+          style={[styles.primaryButton, !nextContainer && styles.buttonDisabled]}
+          onPress={() => nextContainer && onOpenContainer(nextContainer)}
+          disabled={!nextContainer}
         >
-          <Text style={styles.primaryButtonText}>Scan next vehicle</Text>
+          <Text style={styles.primaryButtonText}>
+            {nextContainer ? `Continue ${nextContainer}` : 'All containers sealed'}
+          </Text>
         </Pressable>
       </View>
     </View>

@@ -1,0 +1,822 @@
+<title>Loading Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Same livery as the Gate Check walkthrough — marine teal, gantry orange —
+     so the two pages read as one product. */
+  :root {
+    --paper: #eceeec;
+    --card: #ffffff;
+    --card-2: #f4f6f5;
+    --ink: #101a1e;
+    --muted: #5c6b70;
+    --rule: #d4dad8;
+    --rule-strong: #b9c2bf;
+    --marine: #0f6b6b;
+    --marine-soft: #ddeceb;
+    --sea: #10704f;
+    --sea-soft: #dbefe5;
+    --signal: #c14618;
+    --signal-soft: #fae3d9;
+    --amber: #8d5c0d;
+    --amber-soft: #f8ebd4;
+    --shadow: 0 1px 2px rgba(16,26,30,.05), 0 6px 18px rgba(16,26,30,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0a1012; --card: #111a1d; --card-2: #162024;
+      --ink: #e6ebe9; --muted: #8b9b9f; --rule: #212e33; --rule-strong: #33454b;
+      --marine: #4fb3b3; --marine-soft: #122a2c;
+      --sea: #3ec18f; --sea-soft: #0e2a22;
+      --signal: #f0763f; --signal-soft: #331408;
+      --amber: #e8b04a; --amber-soft: #2c2109;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0a1012; --card: #111a1d; --card-2: #162024;
+    --ink: #e6ebe9; --muted: #8b9b9f; --rule: #212e33; --rule-strong: #33454b;
+    --marine: #4fb3b3; --marine-soft: #122a2c;
+    --sea: #3ec18f; --sea-soft: #0e2a22;
+    --signal: #f0763f; --signal-soft: #331408;
+    --amber: #e8b04a; --amber-soft: #2c2109;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 400 16px/1.55 Chivo, ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .app { max-width: 860px; margin: 0 auto; padding: clamp(16px, 3vw, 32px) clamp(14px, 3vw, 28px) 64px; }
+
+  /* ---------------- top bar ---------------- */
+  .top {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 14px; border-bottom: 1px solid var(--rule); margin-bottom: 20px;
+  }
+  .top .mark { width: 10px; height: 10px; border-radius: 2px; background: var(--marine); }
+  .top .name { font-weight: 700; letter-spacing: -.01em; }
+  .top .who { margin-left: auto; color: var(--muted); font-size: .875rem; }
+
+  h1 { font-weight: 900; font-size: clamp(1.5rem, 4vw, 2rem); letter-spacing: -.03em; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .9375rem; max-width: 62ch; }
+
+  /* ---------------- container picker ---------------- */
+  .boxes { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 18px; }
+  .box {
+    appearance: none; cursor: pointer; flex: 0 0 auto; text-align: left;
+    border: 1px solid var(--rule); border-radius: 11px; padding: 11px 14px;
+    background: var(--card); color: var(--ink); display: grid; gap: 3px; min-width: 148px;
+    font: 400 .875rem/1.2 Chivo, sans-serif; box-shadow: var(--shadow);
+  }
+  .box .bid { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: .9375rem; }
+  .box .bst { color: var(--muted); font-size: .75rem; }
+  .box[aria-selected="true"] { border-color: var(--marine); box-shadow: 0 0 0 2px var(--marine-soft); }
+  .box.sealed .bst { color: var(--sea); font-weight: 600; }
+
+  /* ---------------- container photo ---------------- */
+  .capture {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--rule); border-radius: 13px;
+    padding: 16px; box-shadow: var(--shadow); margin-bottom: 20px;
+  }
+  .capture .lbl { display: grid; gap: 2px; min-width: 0; }
+  .capture .lbl .t { font-weight: 700; font-size: 1rem; }
+  .capture .lbl .m { color: var(--muted); font-size: .8125rem; }
+  .capture .grow { flex: 1; min-width: 100px; }
+
+  /* ---------------- the tick ---------------- */
+  .slot {
+    appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+    border: 1.5px dashed var(--rule-strong); background: var(--card-2); color: var(--muted);
+    border-radius: 10px; padding: 10px 13px; font: 600 .8125rem/1 Chivo, sans-serif;
+    min-height: 46px; transition: border-color .15s, background .15s, color .15s;
+  }
+  .slot:hover:not([disabled]) { border-color: var(--marine); color: var(--marine); }
+  .slot[disabled] { cursor: default; }
+  .slot .icon {
+    width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
+    border: 1.5px solid currentColor; display: grid; place-items: center;
+    font-size: .75rem; font-weight: 900;
+  }
+  .slot .val { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  .slot.reading { border-style: solid; border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+  .slot.reading .icon { border-style: dashed; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .slot.done {
+    border-style: solid; border-color: var(--sea); background: var(--sea-soft); color: var(--sea);
+  }
+  .slot.done .icon { background: var(--sea); border-color: var(--sea); color: var(--card); }
+  .slot.bad {
+    border-style: solid; border-color: var(--signal); background: var(--signal-soft); color: var(--signal);
+  }
+  .slot.bad .icon { background: var(--signal); border-color: var(--signal); color: var(--card); }
+
+  /* ---------------- checklist ---------------- */
+  .listcard {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 13px;
+    box-shadow: var(--shadow); overflow: hidden; margin-bottom: 18px;
+  }
+  .listhead {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 15px 16px; border-bottom: 1px solid var(--rule); background: var(--card-2);
+  }
+  .listhead .t { font-weight: 700; }
+  .listhead .m { color: var(--muted); font-size: .8125rem; }
+
+  .row {
+    display: grid; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--rule);
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .row:last-child { border-bottom: 0; }
+  .row.settled { background: var(--sea-soft); }
+  .row.wrong { background: var(--signal-soft); }
+  .row .pos {
+    font-family: "IBM Plex Mono", monospace; font-weight: 600; color: var(--muted);
+    font-size: .875rem; text-align: center;
+  }
+  .row .about { display: grid; gap: 3px; min-width: 0; }
+  .row .veh { font-weight: 600; font-size: .9375rem; }
+  .row .vin {
+    font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums;
+    font-size: .8125rem; color: var(--muted); overflow-wrap: anywhere;
+  }
+  .row .marks { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 26px minmax(0, 1fr); }
+    .row .marks { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+
+  .verdict {
+    display: inline-flex; align-items: center; gap: 6px; font-weight: 700;
+    font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
+    padding: 6px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .verdict.ok { background: var(--sea); color: var(--card); }
+  .verdict.no { background: var(--signal); color: var(--card); }
+  .verdict.idle { background: transparent; color: var(--muted); border: 1px dashed var(--rule-strong); }
+
+  .whyline {
+    grid-column: 1 / -1; font-size: .8125rem; color: var(--signal);
+    background: var(--card); border: 1px solid var(--signal); border-radius: 9px;
+    padding: 10px 12px; margin-top: 2px;
+  }
+  .whyline b { font-weight: 700; }
+
+  /* ---------------- actions & footer ---------------- */
+  .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; }
+  .btn {
+    appearance: none; cursor: pointer; border-radius: 10px; padding: 13px 18px;
+    font: 600 .9375rem/1 Chivo, sans-serif; border: 1px solid var(--rule);
+    background: var(--card); color: var(--ink);
+  }
+  .btn:hover:not([disabled]) { border-color: var(--marine); color: var(--marine); }
+  .btn.seal { background: var(--marine); border-color: var(--marine); color: #fff; }
+  .btn.seal[disabled] { background: var(--card-2); border-color: var(--rule); color: var(--muted); cursor: not-allowed; }
+  .btn.warn:hover { border-color: var(--signal); color: var(--signal); }
+
+  .banner {
+    border-radius: 12px; padding: 15px 16px; margin-bottom: 18px; display: grid; gap: 4px;
+    border: 1px solid;
+  }
+  .banner .bt { font-weight: 700; }
+  .banner .bm { font-size: .875rem; }
+  .banner.good { background: var(--sea-soft); border-color: var(--sea); color: var(--sea); }
+  .banner.stop { background: var(--signal-soft); border-color: var(--signal); color: var(--signal); }
+  .banner .bm { color: var(--ink); }
+
+  /* the excel list */
+  details.excel { margin-bottom: 22px; }
+  details.excel > summary {
+    cursor: pointer; font-weight: 600; font-size: .875rem; color: var(--marine);
+    padding: 10px 0; list-style: none;
+  }
+  details.excel > summary::-webkit-details-marker { display: none; }
+  details.excel > summary::before { content: "▸ "; }
+  details.excel[open] > summary::before { content: "▾ "; }
+  .sheet {
+    border: 1px solid var(--rule); border-radius: 10px; overflow: auto; background: var(--card);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+  th, td { padding: 8px 11px; border-bottom: 1px solid var(--rule); text-align: left; }
+  th {
+    background: var(--card-2); font-weight: 600; font-size: .6875rem;
+    text-transform: uppercase; letter-spacing: .07em; color: var(--muted); white-space: nowrap;
+  }
+  td.k { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  tr.here td.k { color: var(--marine); font-weight: 600; }
+
+  footer {
+    border-top: 1px solid var(--rule); padding-top: 18px; color: var(--muted); font-size: .875rem;
+    display: grid; gap: 8px; max-width: 68ch;
+  }
+  footer b { color: var(--ink); font-weight: 600; }
+
+  :focus-visible { outline: 2px solid var(--marine); outline-offset: 2px; border-radius: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+<div class="app">
+
+  <div class="top">
+    <span class="mark"></span>
+    <span class="name">Loading Checklist</span>
+    <span class="who">Ramesh Patel · Mundra · <span id="net">offline</span></span>
+  </div>
+
+  <h1>Tick off each car as you load it</h1>
+  <p class="sub">
+    Photograph the container plate once, then each car's chassis plate. A green tick means the
+    number was read and it matches the pickup list. Anything that does not belong turns red
+    before the car goes in.
+  </p>
+
+  <div class="boxes" id="boxes" role="tablist" aria-label="Containers"></div>
+
+  <div class="capture">
+    <div class="lbl grow">
+      <span class="t">Container plate</span>
+      <span class="m" id="cap-note">Photograph the number on the door — once per container</span>
+    </div>
+    <button class="slot" id="cap-slot" data-shoot="container">
+      <span class="icon" aria-hidden="true">○</span>
+      <span class="val">Take photo</span>
+    </button>
+  </div>
+
+  <div id="alert"></div>
+
+  <div class="listcard">
+    <div class="listhead">
+      <div>
+        <div class="t" id="list-title">Cars for this container</div>
+        <div class="m" id="list-note">From the pickup list</div>
+      </div>
+      <div class="verdict idle" id="list-count">0 of 4 verified</div>
+    </div>
+    <div id="rows"></div>
+  </div>
+
+  <div class="acts">
+    <button class="btn seal" id="seal" disabled>Seal container</button>
+    <button class="btn warn" id="try-wrong">Try a car from another container</button>
+    <button class="btn warn" id="try-unknown">Try a car not on the list</button>
+    <button class="btn" id="reset">Start over</button>
+  </div>
+
+  <details class="excel">
+    <summary>Show the pickup list this checks against</summary>
+    <div class="sheet"><table id="sheet"></table></div>
+  </details>
+
+  <footer>
+    <p>
+      <b>What the tick means.</b> The photo was read, the number passed its own validity check,
+      and it matches what the pickup list says for this container. A container number carries a
+      built-in check digit, so a misread of one character is caught before it can mislead anyone.
+    </p>
+    <p>
+      Works with no signal. Photos and results are held on the phone and sent when a connection
+      comes back — the tick does not wait for the network.
+    </p>
+  </footer>
+</div>
+<script type="module">
+const REPORT = {"ref":"PUR/20260814/INMUN/001","doRef":"DO-2026-08-4471","port":"Mundra","from":"2026-08-14","to":"2026-08-20"};
+const LINES = [{"id":"l1","lineNo":1,"containerNo":"OOLU2656042","vin":"MA3DY4XX5SM004431","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Pearl Arctic White","loadPosition":1,"destinationPort":"CLVAP"},{"id":"l2","lineNo":2,"containerNo":"OOLU2656042","vin":"MATVXBAFXSG500805","make":"Tata Motors","model":"Punch","variant":"Creative","colour":"Pearl Arctic White","loadPosition":2,"destinationPort":"CLVAP"},{"id":"l3","lineNo":3,"containerNo":"OOLU2656042","vin":"MA3RWNPT2SM730522","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Magma Grey","loadPosition":3,"destinationPort":"CLVAP"},{"id":"l4","lineNo":4,"containerNo":"OOLU2656042","vin":"MA36CY961SC255889","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Nexa Blue","loadPosition":4,"destinationPort":"CLVAP"},{"id":"l5","lineNo":5,"containerNo":"MSKU9913027","vin":"MA1YEDRR9SC299363","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Pearl Arctic White","loadPosition":1,"destinationPort":"CLVAP"},{"id":"l6","lineNo":6,"containerNo":"MSKU9913027","vin":"MA3VGAGJ8SM671690","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Fire Red","loadPosition":2,"destinationPort":"CLVAP"},{"id":"l7","lineNo":7,"containerNo":"MSKU9913027","vin":"MALWXRZ79SM990018","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Magma Grey","loadPosition":3,"destinationPort":"CLVAP"},{"id":"l8","lineNo":8,"containerNo":"MSKU9913027","vin":"MA3WK1MK4SG139190","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Nexa Blue","loadPosition":4,"destinationPort":"CLVAP"},{"id":"l9","lineNo":9,"containerNo":"OOLU0515390","vin":"MALXLEF23SG027017","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Midnight Black","loadPosition":1,"destinationPort":"MXVER"},{"id":"l10","lineNo":10,"containerNo":"OOLU0515390","vin":"MA3G81EA3SB725899","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Fire Red","loadPosition":2,"destinationPort":"MXVER"},{"id":"l11","lineNo":11,"containerNo":"OOLU0515390","vin":"MA3A04CJ6SC153352","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Fire Red","loadPosition":3,"destinationPort":"MXVER"},{"id":"l12","lineNo":12,"containerNo":"OOLU0515390","vin":"MALLERVX2SA865880","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Silky Silver","loadPosition":4,"destinationPort":"MXVER"},{"id":"l13","lineNo":13,"containerNo":"OOLU3581143","vin":"MA3J487H7SB793675","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Nexa Blue","loadPosition":1,"destinationPort":"CLVAP"},{"id":"l14","lineNo":14,"containerNo":"OOLU3581143","vin":"MA1J59MYXSM665998","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Magma Grey","loadPosition":2,"destinationPort":"CLVAP"},{"id":"l15","lineNo":15,"containerNo":"OOLU3581143","vin":"MA1KPUAW2SM601961","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Magma Grey","loadPosition":3,"destinationPort":"CLVAP"},{"id":"l16","lineNo":16,"containerNo":"OOLU3581143","vin":"MATTMN3B3SA535717","make":"Tata Motors","model":"Punch","variant":"Creative","colour":"Midnight Black","loadPosition":4,"destinationPort":"CLVAP"},{"id":"l17","lineNo":17,"containerNo":"OOLU8501238","vin":"MA3VVPW81SA527830","make":"Maruti Suzuki","model":"Dzire","variant":"VXI","colour":"Magma Grey","loadPosition":1,"destinationPort":"ZADUR"},{"id":"l18","lineNo":18,"containerNo":"OOLU8501238","vin":"MALSUL1G9SC217572","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Silky Silver","loadPosition":2,"destinationPort":"ZADUR"},{"id":"l19","lineNo":19,"containerNo":"OOLU8501238","vin":"MALWVZ0X2SA893134","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Pearl Arctic White","loadPosition":3,"destinationPort":"ZADUR"},{"id":"l20","lineNo":20,"containerNo":"OOLU8501238","vin":"MALV7Y4H5SM921767","make":"Hyundai","model":"Creta","variant":"SX(O)","colour":"Nexa Blue","loadPosition":4,"destinationPort":"ZADUR"},{"id":"l21","lineNo":21,"containerNo":"SEGU4507796","vin":"MA1PYRX98SC949478","make":"Mahindra","model":"XUV 3XO","variant":"AX7L","colour":"Nexa Blue","loadPosition":1,"destinationPort":"IDJKT"},{"id":"l22","lineNo":22,"containerNo":"SEGU4507796","vin":"MA3D88BV0SG890931","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Nexa Blue","loadPosition":2,"destinationPort":"IDJKT"},{"id":"l23","lineNo":23,"containerNo":"SEGU4507796","vin":"MA3Z24NG2SA084329","make":"Maruti Suzuki","model":"Swift","variant":"ZXI Plus","colour":"Fire Red","loadPosition":3,"destinationPort":"IDJKT"},{"id":"l24","lineNo":24,"containerNo":"SEGU4507796","vin":"MA34U5VGXSG970664","make":"Maruti Suzuki","model":"Baleno","variant":"Alpha","colour":"Magma Grey","loadPosition":4,"destinationPort":"IDJKT"}];
+
+/* ============================================================================
+ * Engine — ported verbatim from @dp/shared-rules. Pure and dependency-free,
+ * which is exactly why it can run here unchanged: the same code runs on the
+ * phone (offline, advisory) and on the server (authoritative).
+ * ==========================================================================*/
+
+const LETTER_VALUES = (() => {
+  const map = {}; let v = 10;
+  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { while (v % 11 === 0) v++; map[ch] = v++; }
+  return map;
+})();
+
+function containerCheckDigit(first10) {
+  if (!/^[A-Z]{4}[0-9]{6}$/.test(first10)) return null;
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    const ch = first10[i];
+    sum += (i < 4 ? LETTER_VALUES[ch] : ch.charCodeAt(0) - 48) * (1 << i);
+  }
+  return (sum % 11) % 10;   // remainder 10 folds to 0
+}
+
+const normalizeIdentifier = (raw) =>
+  String(raw ?? '').toUpperCase().replace(/[\s\-_./\\|:,]+/g, '').trim();
+
+const isValidContainerNo = (v) =>
+  /^[A-Z]{4}[0-9]{7}$/.test(v) && containerCheckDigit(v.slice(0, 10)) === Number(v[10]);
+
+/* A number ending in 0 sits in the weaker 0/10 collision class: remainders 0
+   and 10 are indistinguishable, so a passing check is weaker evidence. */
+const isCheckDigitAmbiguous = (v) => v.length === 11 && v[10] === '0';
+
+/* A container number is positionally strict — 1-4 letters, 5-11 digits — so we
+   know which direction to resolve each confusable, and the check digit verifies
+   the result instead of us guessing. */
+const TO_DIGIT = { O:'0', Q:'0', D:'0', U:'0', I:'1', L:'1', T:'1', Z:'2', E:'3',
+                   A:'4', S:'5', G:'6', C:'6', Y:'7', B:'8', P:'9' };
+const TO_LETTER = { '0':'O', '1':'I', '2':'Z', '3':'E', '4':'A',
+                    '5':'S', '6':'G', '7':'T', '8':'B', '9':'P' };
+
+function coerceContainerShape(value) {
+  if (value.length !== 11) return value;
+  let out = '';
+  for (let i = 0; i < 11; i++) {
+    const ch = value[i];
+    out += i < 4 ? (TO_LETTER[ch] ?? ch) : (TO_DIGIT[ch] ?? ch);
+  }
+  return out;
+}
+
+/* Best check-digit-valid reading of a raw plate read, or null.
+   The single-substitution sweep is capped at ONE candidate: a blind sweep finds
+   about six variants that satisfy the check digit, so "it validates after an
+   edit" carries almost no information. */
+function resolveContainer(raw) {
+  const normalized = normalizeIdentifier(raw);
+  if (normalized.length !== 11) return null;
+  if (isValidContainerNo(normalized)) return { value: normalized, exact: true };
+
+  const coerced = coerceContainerShape(normalized);
+  if (isValidContainerNo(coerced)) return { value: coerced, exact: false };
+
+  if (/^[A-Z]{4}[0-9]{7}$/.test(coerced)) {
+    const repairs = [];
+    for (let i = 4; i < 11; i++) {
+      for (const d of '0123456789') {
+        if (d === coerced[i]) continue;
+        const variant = coerced.slice(0, i) + d + coerced.slice(i + 1);
+        if (isValidContainerNo(variant)) repairs.push(variant);
+      }
+    }
+    if (repairs.length === 1) return { value: repairs[0], exact: false };
+  }
+  return null;
+}
+
+/* Only I, O and Q are illegal in a VIN. D, L, S, B and Z are all legal —
+   folding those into digits would corrupt genuine VINs. */
+const normalizeVin = (raw) => normalizeIdentifier(raw).replace(/I/g, '1').replace(/[OQ]/g, '0');
+
+function levenshtein(a, b, max = 4) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let curr = new Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i; let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > max) return max + 1;
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length];
+}
+
+const suffixLen = (a, b) => {
+  let n = 0;
+  while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+  return n;
+};
+
+/* Returns null on a tie: an ambiguous fuzzy match must never be auto-resolved.
+   Guessing between two real vehicles is worse than retyping 17 characters. */
+function findVinLine(vin, lines, threshold = 0.85) {
+  const exact = lines.find((l) => l.vin === vin);
+  if (exact) return { line: exact, confidence: 1 };
+
+  const scored = [];
+  for (const line of lines) {
+    const d = levenshtein(vin, line.vin, 3);
+    if (d === 1) { scored.push({ line, confidence: 0.9 }); continue; }
+    if (suffixLen(vin, line.vin) >= 12 && vin.length === line.vin.length) {
+      scored.push({ line, confidence: 0.85 }); continue;
+    }
+    if (d === 2) scored.push({ line, confidence: 0.7 });
+  }
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.confidence - a.confidence);
+  if (scored[0].confidence < threshold) return null;
+  if (scored.length > 1 && scored[1].confidence === scored[0].confidence) return null;
+  return scored[0];
+}
+
+function progressFor(containerNo, lines, loaded, justLoaded) {
+  const forC = lines.filter((l) => l.containerNo === containerNo);
+  const done = new Set(loaded);
+  if (justLoaded) done.add(justLoaded);
+  const remainingVins = forC.filter((l) => !done.has(l.vin)).map((l) => l.vin);
+  return { loaded: forC.length - remainingVins.length, expected: forC.length, remainingVins };
+}
+
+const describe = (l) => [l.make, l.model, l.variant, l.colour].filter(Boolean).join(' ') || 'vehicle';
+
+/* Rules evaluated in a fixed order; the first hit wins. `trace` records which
+   were considered so the rail can show the reasoning, not just the answer. */
+function reconcile({ containerNo, vin, lines, loadedVins = [], reportValidTo, now = new Date() }) {
+  const c = normalizeIdentifier(containerNo);
+  const v = normalizeVin(vin);
+  const loaded = new Set(loadedVins);
+  const trace = [];
+  const step = (rule, why, hit) => { trace.push({ rule, why, hit }); };
+
+  if (!c || !v) {
+    step('Awaiting scan', 'One half of the pair is missing.', true);
+    return { outcome: 'PENDING', reasonCode: 'AWAITING_SCAN', severity: 'warn',
+      matchConfidence: 0, message: !c ? 'Scan the container number' : 'Scan the vehicle VIN', trace };
+  }
+
+  if (reportValidTo && now > reportValidTo) {
+    step('Report expired', 'Checked first — an expired report makes every verdict below it meaningless.', true);
+    return { outcome: 'EXPIRED_REPORT', reasonCode: 'REPORT_EXPIRED', severity: 'block',
+      matchConfidence: 0, message: 'Pickup report has expired',
+      detail: 'Contact operations for a current report.', trace };
+  }
+  step('Report expired', 'Report is inside its validity window.', false);
+
+  if (loaded.has(v)) {
+    step('Vehicle already loaded', 'This VIN already carries a live MATCH. A car cannot be in two containers.', true);
+    return { outcome: 'DUPLICATE_VIN', reasonCode: 'VIN_ALREADY_LOADED', severity: 'block',
+      matchConfidence: 1, message: 'This vehicle is already loaded',
+      detail: `VIN ${v} has already been reconciled into a container. Verify you are not scanning the same vehicle twice.`, trace };
+  }
+  step('Vehicle already loaded', 'VIN carries no live MATCH yet.', false);
+
+  const containerLines = lines.filter((l) => l.containerNo === c);
+  if (!containerLines.length) {
+    step('Container unknown', 'Scanned container appears nowhere on the active report.', true);
+    return { outcome: 'CONTAINER_NOT_IN_REPORT', reasonCode: 'CONTAINER_UNKNOWN', severity: 'block',
+      matchConfidence: 0, message: 'Container not on the pickup report',
+      detail: `${c} does not appear on the active report. Do not load.`, trace };
+  }
+  step('Container unknown', `${c} is on the report with ${containerLines.length} vehicles booked.`, false);
+
+  const here = findVinLine(v, containerLines);
+  if (here) {
+    const fuzzy = here.confidence < 1;
+    step('Vehicle belongs here', fuzzy
+      ? 'VIN matched a line in this container after a single-character correction.'
+      : 'VIN matches a line in this container exactly.', true);
+    const progress = progressFor(c, lines, loaded, here.line.vin);
+    return { outcome: 'MATCH', reasonCode: fuzzy ? 'FUZZY_VIN' : 'EXACT', severity: 'pass',
+      matchConfidence: here.confidence, matchedLine: here.line, progress,
+      message: `Load into ${c}`,
+      detail: `${describe(here.line)} — position ${here.line.loadPosition ?? '?'}. ` +
+        `${progress.loaded} of ${progress.expected} loaded.` +
+        (fuzzy ? ' VIN matched with correction — confirm the label before loading.' : ''),
+      trace };
+  }
+  step('Vehicle belongs here', 'VIN matches no line in this container.', false);
+
+  const elsewhere = findVinLine(v, lines);
+  if (elsewhere) {
+    step('Wrong container', 'VIN is on the report, but assigned to a different container. This is the failure the system exists to catch.', true);
+    return { outcome: 'WRONG_CONTAINER', reasonCode: 'WRONG_VEHICLE', severity: 'block',
+      matchConfidence: elsewhere.confidence, expectedLine: elsewhere.line,
+      progress: progressFor(c, lines, loaded),
+      message: 'DO NOT LOAD — wrong container',
+      detail: `${describe(elsewhere.line)} (VIN ${v}) is assigned to container ` +
+        `${elsewhere.line.containerNo}, not ${c}. Supervisor has been notified.`, trace };
+  }
+  step('Wrong container', 'VIN is not on the report at all.', false);
+
+  const progress = progressFor(c, lines, loaded);
+  if (!progress.remainingVins.length) {
+    step('Container full', `All ${progress.expected} booked vehicles are aboard, and this VIN is not one of them.`, true);
+    return { outcome: 'CONTAINER_FULL', reasonCode: 'OVER_CAPACITY', severity: 'block',
+      matchConfidence: 0, progress, message: 'Container is already complete',
+      detail: `All ${progress.expected} vehicles for ${c} are loaded. This vehicle does not belong here.`, trace };
+  }
+  step('Container full', `${progress.remainingVins.length} vehicles still expected.`, false);
+
+  step('Vehicle unknown', 'VIN appears nowhere on the active report.', true);
+  return { outcome: 'VIN_NOT_IN_REPORT', reasonCode: 'VEHICLE_UNKNOWN', severity: 'block',
+    matchConfidence: 0, progress, message: 'Vehicle not on the pickup report',
+    detail: `VIN ${v} does not appear on the active report. Do not load. ` +
+      `${c} still expects: ${progress.remainingVins.join(', ')}.`, trace };
+}
+
+/* ============================================================================
+ * Loading checklist.
+ *
+ * One container at a time, one row per car the pickup list expects in it. The
+ * officer photographs the container plate once, then each chassis plate; a row
+ * settles green when both reads are in and they agree with the list.
+ *
+ * Matching is the engine above — the same code the phone and the server run.
+ * ==========================================================================*/
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const VALID_TO = new Date(`${REPORT.to}T23:59:59.999Z`);
+const NOW = new Date(`${REPORT.from}T09:00:00Z`);
+const CONTAINERS = [...new Set(LINES.map((l) => l.containerNo))];
+
+const slow = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wait = (ms) => new Promise((r) => setTimeout(r, slow ? ms : 0));
+
+/* Per container: whether the plate has been read, each VIN's state, and any
+   car that turned up that the list does not expect. */
+const boxes = new Map(CONTAINERS.map((c) => [c, {
+  plate: null,              // the container number OCR returned
+  rows: new Map(),          // vin -> { read, outcome, detail }
+  intruders: [],            // { vin, outcome, detail, belongsIn }
+  sealed: false,
+}]));
+
+let current = CONTAINERS[0];
+let busy = false;
+
+const box = () => boxes.get(current);
+const linesFor = (c) => LINES.filter((l) => l.containerNo === c);
+const verifiedCount = (c) => {
+  const b = boxes.get(c);
+  return linesFor(c).filter((l) => b.rows.get(l.vin)?.outcome === 'MATCH').length;
+};
+
+/* ---------------- rendering ---------------- */
+
+function renderBoxes() {
+  $('boxes').innerHTML = CONTAINERS.map((c) => {
+    const total = linesFor(c).length;
+    const done = verifiedCount(c);
+    const b = boxes.get(c);
+    return `<button class="box ${b.sealed ? 'sealed' : ''}" role="tab"
+              aria-selected="${c === current}" data-box="${esc(c)}">
+      <span class="bid">${esc(c)}</span>
+      <span class="bst">${b.sealed ? 'sealed ✓' : `${done} of ${total} verified`}</span>
+    </button>`;
+  }).join('');
+}
+
+function slotMarkup({ state, label, value, action, vin }) {
+  const icon = state === 'done' ? '✓' : state === 'bad' ? '✕' : state === 'reading' ? '◠' : '○';
+  const cls = state === 'idle' ? '' : state;
+  const live = state === 'idle' && Boolean(action);
+
+  /* The action attribute is emitted only when the slot can actually be used.
+     A finished slot that still advertises data-shoot claims to be a control it
+     is not — misleading to anything reading the DOM, tests included. */
+  return `<button class="slot ${cls}" ${live ? '' : 'disabled'}
+            ${live ? `data-shoot="${action}"` : ''} ${live && vin ? `data-vin="${esc(vin)}"` : ''}
+            ${state === 'done' ? 'aria-label="Read and matched"' : ''}>
+    <span class="icon" aria-hidden="true">${icon}</span>
+    <span class="${value ? 'val' : ''}">${esc(value || label)}</span>
+  </button>`;
+}
+
+function renderCapture() {
+  const b = box();
+  const slot = $('cap-slot');
+
+  if (b.plate) {
+    slot.className = 'slot done';
+    slot.disabled = true;
+    slot.innerHTML = `<span class="icon" aria-hidden="true">✓</span><span class="val">${esc(b.plate)}</span>`;
+    $('cap-note').textContent = 'Read and confirmed against the pickup list';
+  } else {
+    slot.className = 'slot';
+    slot.disabled = busy;
+    slot.innerHTML = `<span class="icon" aria-hidden="true">○</span><span class="val">Take photo</span>`;
+    $('cap-note').textContent = 'Photograph the number on the door — once per container';
+  }
+}
+
+function renderRows() {
+  const b = box();
+  const lines = linesFor(current);
+  const done = verifiedCount(current);
+
+  $('list-title').textContent = `Cars for ${current}`;
+  $('list-note').textContent = `${lines.length} expected on ${REPORT.ref}`;
+
+  const count = $('list-count');
+  count.textContent = `${done} of ${lines.length} verified`;
+  count.className = 'verdict ' + (done === lines.length ? 'ok' : done ? 'idle' : 'idle');
+
+  const expected = lines.map((l) => {
+    const r = b.rows.get(l.vin);
+    const chassisState = r ? (r.outcome === 'MATCH' ? 'done' : 'bad') : (r === undefined ? 'idle' : 'idle');
+    const settled = r?.outcome === 'MATCH';
+
+    return `<div class="row ${settled ? 'settled' : ''}">
+      <span class="pos">${l.loadPosition ?? '—'}</span>
+      <span class="about">
+        <span class="veh">${esc([l.make, l.model, l.colour].filter(Boolean).join(' '))}</span>
+        <span class="vin">${esc(l.vin)}</span>
+      </span>
+      <span class="marks">
+        ${slotMarkup({
+          state: b.plate ? 'done' : 'idle',
+          label: 'Container', value: b.plate ? 'Container' : '', })}
+        ${slotMarkup({
+          state: r ? chassisState : 'idle',
+          label: 'Chassis photo',
+          value: r ? r.read : '',
+          action: b.plate ? 'chassis' : null,
+          vin: l.vin,
+        })}
+        <span class="verdict ${settled ? 'ok' : r ? 'no' : 'idle'}">
+          ${settled ? 'Match' : r ? 'Check' : 'Waiting'}</span>
+      </span>
+      ${r && r.outcome !== 'MATCH' ? `<span class="whyline">${esc(r.detail)}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  const intruders = b.intruders.map((x) => `<div class="row wrong">
+    <span class="pos">!</span>
+    <span class="about">
+      <span class="veh">${esc(x.label)}</span>
+      <span class="vin">${esc(x.vin)}</span>
+    </span>
+    <span class="marks">
+      ${slotMarkup({ state: 'done', label: '', value: 'Container' })}
+      ${slotMarkup({ state: 'bad', label: '', value: x.vin })}
+      <span class="verdict no">Do not load</span>
+    </span>
+    <span class="whyline">${esc(x.detail)}</span>
+  </div>`).join('');
+
+  $('rows').innerHTML = expected + intruders;
+
+  const complete = done === lines.length && lines.length > 0;
+  $('seal').disabled = !complete || b.sealed || busy;
+  $('seal').textContent = b.sealed ? 'Sealed ✓' : 'Seal container';
+  $('try-wrong').disabled = !b.plate || busy;
+  $('try-unknown').disabled = !b.plate || busy;
+}
+
+function renderAlert() {
+  const b = box();
+  const lines = linesFor(current);
+  const done = verifiedCount(current);
+  const problems = b.intruders.length + [...b.rows.values()].filter((r) => r.outcome !== 'MATCH').length;
+
+  if (b.sealed) {
+    $('alert').innerHTML = `<div class="banner good">
+      <span class="bt">${esc(current)} sealed</span>
+      <span class="bm">All ${lines.length} cars verified and photographed. Operations and
+        documentation have been notified.</span></div>`;
+    return;
+  }
+  if (problems) {
+    $('alert').innerHTML = `<div class="banner stop">
+      <span class="bt">${problems} ${problems === 1 ? 'car needs' : 'cars need'} attention</span>
+      <span class="bm">Do not load them into ${esc(current)}. A supervisor has been notified with
+        the photographs.</span></div>`;
+    return;
+  }
+  if (done === lines.length && lines.length) {
+    $('alert').innerHTML = `<div class="banner good">
+      <span class="bt">Ready to seal</span>
+      <span class="bm">All ${lines.length} cars verified against the pickup list.</span></div>`;
+    return;
+  }
+  $('alert').innerHTML = '';
+}
+
+function renderSheet() {
+  $('sheet').innerHTML = `
+    <tr><th>Sr</th><th>Container No</th><th>Chassis No</th><th>Make</th><th>Model</th><th>Colour</th></tr>
+    ${LINES.map((l) => `<tr class="${l.containerNo === current ? 'here' : ''}">
+      <td>${l.lineNo}</td>
+      <td class="k">${esc(l.containerNo)}</td>
+      <td class="k">${esc(l.vin)}</td>
+      <td>${esc(l.make)}</td>
+      <td>${esc(l.model)}</td>
+      <td>${esc(l.colour)}</td>
+    </tr>`).join('')}`;
+}
+
+function render() {
+  renderBoxes(); renderCapture(); renderRows(); renderAlert(); renderSheet();
+}
+
+/* ---------------- the OCR moment ---------------- */
+
+/**
+ * Shows the reading state on one slot, then resolves.
+ *
+ * The pause is the honest part of the simulation: recognition takes a beat, and
+ * a tick that appears instantly reads as a mock rather than a measurement.
+ */
+async function readingPause(el) {
+  if (!el) return wait(520);
+  el.classList.add('reading');
+  el.innerHTML = `<span class="icon" aria-hidden="true">◠</span><span>Reading…</span>`;
+  await wait(620);
+}
+
+async function shootContainer(el) {
+  if (busy || box().plate) return;
+  busy = true;
+  renderRows();
+  try {
+    await readingPause(el);
+    /* The plate read goes through the same recovery the app uses: normalise,
+       coerce confusable characters by position, verify the check digit. */
+    const resolved = resolveContainer(current);
+    box().plate = resolved ? resolved.value : current;
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+/** Runs one chassis read against the list and records what it means. */
+async function shootChassis(vin, el, label) {
+  if (busy || !box().plate) return;
+  busy = true;
+  renderRows();
+  try {
+    await readingPause(el);
+
+    const loaded = new Set(
+      [...box().rows.entries()].filter(([, r]) => r.outcome === 'MATCH').map(([v]) => v));
+
+    const result = reconcile({
+      containerNo: box().plate, vin, lines: LINES,
+      loadedVins: loaded, reportValidTo: VALID_TO, now: NOW,
+    });
+
+    const read = normalizeVin(vin);
+    const onList = LINES.some((l) => l.containerNo === current && l.vin === read);
+
+    if (onList) {
+      box().rows.set(read, { read, outcome: result.outcome, detail: result.detail ?? '' });
+    } else {
+      box().intruders.push({
+        vin: read,
+        label: label ?? 'Not on this list',
+        outcome: result.outcome,
+        detail: result.expectedLine
+          ? `This car belongs in ${result.expectedLine.containerNo}, not ${box().plate}.`
+          : `This car is not on ${REPORT.ref} at all. Do not load it.`,
+      });
+    }
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+/* ---------------- controls ---------------- */
+
+document.addEventListener('click', (event) => {
+  const el = event.target.closest('[data-box],[data-shoot]');
+  if (!el || busy) return;
+
+  if (el.dataset.box) { current = el.dataset.box; render(); return; }
+  if (el.dataset.shoot === 'container') { void shootContainer(el); return; }
+  if (el.dataset.shoot === 'chassis') { void shootChassis(el.dataset.vin, el); }
+});
+
+$('seal').onclick = () => {
+  if ($('seal').disabled) return;
+  box().sealed = true;
+  render();
+};
+
+$('try-wrong').onclick = () => {
+  const other = LINES.find((l) => l.containerNo !== current);
+  if (other) {
+    void shootChassis(other.vin, null,
+      `${[other.make, other.model, other.colour].filter(Boolean).join(' ')} — booked for ${other.containerNo}`);
+  }
+};
+
+$('try-unknown').onclick = () => {
+  void shootChassis('MA3ERLF1S00888777', null, 'Not on today’s pickup list');
+};
+
+$('reset').onclick = () => {
+  for (const c of CONTAINERS) boxes.set(c, { plate: null, rows: new Map(), intruders: [], sealed: false });
+  render();
+};
+
+render();
+</script>

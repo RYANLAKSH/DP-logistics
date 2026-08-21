@@ -107,6 +107,18 @@ use your machine's LAN address:
 EXPO_PUBLIC_API_BASE=http://192.168.1.20:3000 npx expo start
 ```
 
+## Two shareable demos
+
+Both are single self-contained pages — open them straight from disk, no server:
+
+| File | For |
+|---|---|
+| `packages/admin/checklist-demo.html` | The end-user checklist: photograph the plate, tick off each car |
+| `packages/admin/client-demo.html` | The client walkthrough: the gate, the office, and whether the container can ship |
+
+Each embeds the real matching engine and the seeded 24-vehicle report, so the
+verdicts are not scripted.
+
 ## The admin panel
 
 Served by the API at **http://localhost:3000/admin/index.html** — no build step,
