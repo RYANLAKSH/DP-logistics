@@ -29,6 +29,14 @@ export function RequireRole({ allow }: { allow: UserRole[] }) {
   return <Outlet />
 }
 
+/**
+ * ADMIN can reach everything a MANAGER can. The reverse is not true, so
+ * admin-only screens use this rather than widening RequireRole.
+ */
+export function RequireAdmin() {
+  return <RequireRole allow={['ADMIN']} />
+}
+
 export function RoleHome() {
   const { profile, loading } = useSession()
   if (loading) return <Spinner label="Loading" />

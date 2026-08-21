@@ -54,7 +54,7 @@ const MANAGER_NAV = [
   { to: '/manager/manifests', label: 'Manifests' },
   { to: '/manager/assignments', label: 'Assignments' },
   { to: '/manager/exceptions', label: 'Exceptions' },
-  { to: '/manager/users', label: 'Users' },
+  { to: '/manager/users', label: 'Users', adminOnly: true },
   { to: '/manager/audit', label: 'Audit log' },
 ]
 
@@ -74,8 +74,12 @@ export function ManagerShell({
           <span aria-hidden="true" className="text-brand-500">✓</span>
           <span className="font-bold tracking-tight">DP Verify</span>
         </div>
+        {/* Hiding a link the role cannot use is courtesy, not security: the
+            route guard refuses it and RLS returns nothing regardless. */}
         <ul className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible">
-          {MANAGER_NAV.map((item) => (
+          {MANAGER_NAV
+            .filter((item) => !item.adminOnly || profile?.role === 'ADMIN')
+            .map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}

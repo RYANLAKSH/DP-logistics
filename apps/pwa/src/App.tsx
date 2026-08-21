@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { DataProvider } from '@/data/provider'
 import { SessionProvider } from '@/lib/session'
-import { RequireAuth, RequireRole, RoleHome } from '@/routes/guards'
+import { RequireAdmin, RequireAuth, RequireRole, RoleHome } from '@/routes/guards'
 import { LoginPage } from '@/routes/LoginPage'
 import { NotFoundPage, OfflinePage, UnauthorizedPage } from '@/routes/ErrorPages'
 import { DriverHomePage } from '@/routes/driver/DriverHomePage'
@@ -74,8 +74,12 @@ export function AppRoutes() {
           />
           <Route path="/manager/assignments" element={<AssignmentsPage />} />
           <Route path="/manager/exceptions" element={<ExceptionsPage />} />
-          <Route path="/manager/users" element={<UsersPage />} />
           <Route path="/manager/audit" element={<AuditLogPage />} />
+        </Route>
+
+        {/* Admin-only. A MANAGER reaching these lands on /403. */}
+        <Route element={<RequireAdmin />}>
+          <Route path="/manager/users" element={<UsersPage />} />
         </Route>
       </Route>
 

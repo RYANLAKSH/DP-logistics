@@ -101,10 +101,31 @@ await mp.click('a:has-text("Audit log")')
 await mp.waitForSelector('text=Append-only')
 await mp.screenshot({ path: `${OUT}/10-manager-audit.png`, fullPage: true })
 
-// --- guard: driver cannot render a manager screen ---------------------------
+// --- role guards ------------------------------------------------------------
+// A driver reaching a manager route.
 await page.goto(`${BASE}/manager`)
 await page.waitForURL('**/403')
 await shot('11-driver-blocked-from-manager')
+
+// A manager reaching an admin-only route. Managers are not admins.
+await mp.goto(`${BASE}/manager/users`)
+await mp.waitForURL('**/403')
+await mp.screenshot({ path: `${OUT}/12-manager-blocked-from-admin.png` })
+const managerSeesUsersLink = await mp.isVisible('a:has-text("Users")')
+
+// An admin reaching the same route.
+const actx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+const ap = await actx.newPage()
+ap.on('pageerror', (e) => errors.push(String(e)))
+await ap.goto(`${BASE}/login`)
+await ap.fill('input[type=email]', 'admin@dp.test')
+await ap.fill('input[type=password]', 'x')
+await ap.click('button[type=submit]')
+await ap.waitForURL('**/manager')
+await ap.goto(`${BASE}/manager/users`)
+await ap.waitForSelector('text=Roles and yard assignments')
+const adminReachesUsers = ap.url().endsWith('/manager/users')
+await ap.screenshot({ path: `${OUT}/13-admin-users.png`, fullPage: true })
 
 await browser.close()
 
@@ -114,6 +135,9 @@ const report = {
   namesOtherContainer: blocked.includes('assigned to container'),
   secondTaskIsNotTheFirst: !blocked.includes('This vehicle has already been moved'),
   secondChassis,
+  managerBlockedFromAdminRoute: true,
+  managerDoesNotSeeUsersLink: managerSeesUsersLink === false,
+  adminReachesUsers,
   errors,
 }
 console.log(JSON.stringify(report, null, 2))

@@ -18,11 +18,10 @@ const SessionContext = createContext<SessionValue | null>(null)
 /**
  * Holds who is signed in, for the UI's benefit.
  *
- * PHASE 3 NOTE: this is backed by the mock data source and grants nothing —
- * there is no real authentication yet, and nothing is protected. Phase 4
- * replaces the implementation with Supabase Auth. The important property, then
- * and now, is that this context decides which SCREEN renders and never which
- * DATA returns: that is RLS's job, and it stays RLS's job.
+ * Backed by Supabase Auth when configured, and by the mock otherwise. The
+ * important property either way: this context decides which SCREEN renders and
+ * never which DATA returns. That is RLS's job, in the database, and it stays
+ * RLS's job — a user who edits this state in devtools gains a screen, not a row.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const data = useData()
@@ -31,10 +30,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    data.currentProfile()
-      .then((p) => { if (!cancelled) setProfile(p) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+
+    function refresh() {
+      return data.currentProfile()
+        .then((p) => { if (!cancelled) setProfile(p) })
+        .catch(() => { if (!cancelled) setProfile(null) })
+        .finally(() => { if (!cancelled) setLoading(false) })
+    }
+
+    void refresh()
+
+    // Supabase refreshes tokens in the background and can drop a session when
+    // a refresh token is revoked — for instance when an administrator
+    // deactivates the user. React to that rather than waiting for the next
+    // failed request, so a revoked user is returned to the login screen.
+    const withAuthEvents = data as Partial<{
+      onAuthChange(handler: (signedIn: boolean) => void): () => void
+    }>
+    const unsubscribe = withAuthEvents.onAuthChange?.((signedIn) => {
+      if (!signedIn) setProfile(null)
+      else void refresh()
+    })
+
+    return () => { cancelled = true; unsubscribe?.() }
   }, [data])
 
   const signIn = useCallback(async (email: string, password: string) => {
