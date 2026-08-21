@@ -113,6 +113,7 @@ Both are single self-contained pages — open them straight from disk, no server
 
 | File | For |
 |---|---|
+| `packages/admin/results-demo.html` | The outcome: a random batch of pairings, each matched or stopped |
 | `packages/admin/checklist-demo.html` | The end-user checklist: photograph the plate, tick off each car |
 | `packages/admin/client-demo.html` | The client walkthrough: the gate, the office, and whether the container can ship |
 
