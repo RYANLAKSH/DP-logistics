@@ -2,10 +2,16 @@
   "name": "dp-logistics",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "seed": "npm run seed -w @dp/fixtures"
+    "seed": "npm run seed -w @dp/fixtures",
+    "dev": "npm run dev -w @dp/pwa",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:test": "./scripts/db-test.sh"
   }
 }

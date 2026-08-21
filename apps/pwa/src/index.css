@@ -1,0 +1,81 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Tuned for a phone held at arm's length in direct sunlight, by someone
+   wearing gloves. That drives three things: very high contrast, large type,
+   and tap targets that are generous rather than tidy.
+   --------------------------------------------------------------------------- */
+@theme {
+  --color-ink-950: #06090f;
+  --color-ink-900: #0b1220;
+  --color-ink-800: #111a2b;
+  --color-ink-700: #1c2739;
+  --color-ink-600: #334155;
+  --color-line: #2b3a52;
+
+  --color-paper: #f7f9fc;
+  --color-paper-dim: #e5eaf2;
+
+  --color-brand-400: #5eead4;
+  --color-brand-500: #38d9a9;
+  --color-brand-600: #14b88a;
+
+  /* Status colours. Never the only signal — every status also carries an icon
+     and a word, for sunlight and for colour blindness alike. */
+  --color-ok-500: #16a34a;
+  --color-ok-100: #dcfce7;
+  --color-warn-500: #d97706;
+  --color-warn-100: #fef3c7;
+  --color-bad-500: #dc2626;
+  --color-bad-100: #fee2e2;
+  --color-info-500: #2563eb;
+  --color-info-100: #dbeafe;
+  --color-idle-500: #64748b;
+  --color-idle-100: #e2e8f0;
+
+  --text-hero: 2.75rem;
+  --text-hero--line-height: 1.05;
+  --text-code: 1.6rem;
+  --text-code--line-height: 1.2;
+
+  --radius-card: 0.875rem;
+
+  --spacing-touch: 3.5rem;   /* 56px — the minimum interactive height */
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-paper text-ink-900 antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    /* Respect the notch and the home indicator: a driver's thumb lives there. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    overscroll-behavior-y: none;
+  }
+
+  /* Identifier codes are read character by character under pressure, and
+     confusing 0 with O is the whole failure mode this product prevents. */
+  .code {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', monospace;
+    font-variant-ligatures: none;
+    letter-spacing: 0.06em;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-info-500;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

@@ -1,0 +1,116 @@
+import type { ReactNode } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useSession } from '@/lib/session'
+
+/** The driver shell: one column, big type, nothing decorative. */
+export function DriverShell({
+  title, subtitle, children, back, action,
+}: {
+  title: string
+  subtitle?: string
+  children: ReactNode
+  back?: string
+  action?: ReactNode
+}) {
+  const navigate = useNavigate()
+  return (
+    <div className="min-h-dvh bg-paper">
+      <header className="sticky top-0 z-10 border-b border-line/20 bg-ink-900 text-paper">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+          {back && (
+            <button
+              onClick={() => navigate(back)}
+              aria-label="Back"
+              className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg
+                         text-2xl hover:bg-ink-800"
+            >
+              ‹
+            </button>
+          )}
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-bold">{title}</h1>
+            {subtitle && <p className="truncate text-sm text-paper/70">{subtitle}</p>}
+          </div>
+          {action}
+        </div>
+      </header>
+      <main className="mx-auto max-w-2xl px-4 py-5 pb-28">{children}</main>
+    </div>
+  )
+}
+
+/** Sticky footer for the primary action, so it is always under the thumb. */
+export function ActionBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line/20 bg-white/95
+                    px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <div className="mx-auto flex max-w-2xl flex-col gap-2">{children}</div>
+    </div>
+  )
+}
+
+const MANAGER_NAV = [
+  { to: '/manager', label: 'Dashboard', end: true },
+  { to: '/manager/manifests', label: 'Manifests' },
+  { to: '/manager/assignments', label: 'Assignments' },
+  { to: '/manager/exceptions', label: 'Exceptions' },
+  { to: '/manager/users', label: 'Users' },
+  { to: '/manager/audit', label: 'Audit log' },
+]
+
+/** The manager shell: responsive, sidebar on desktop, tabs on tablet. */
+export function ManagerShell({
+  title, subtitle, children, action,
+}: { title: string; subtitle?: string; children: ReactNode; action?: ReactNode }) {
+  const { profile, signOut } = useSession()
+  return (
+    <div className="min-h-dvh bg-paper lg:flex">
+      <nav
+        aria-label="Sections"
+        className="border-b border-line/20 bg-ink-900 text-paper
+                   lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r"
+      >
+        <div className="flex items-center gap-2 px-4 py-4">
+          <span aria-hidden="true" className="text-brand-500">✓</span>
+          <span className="font-bold tracking-tight">DP Verify</span>
+        </div>
+        <ul className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible">
+          {MANAGER_NAV.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  `block whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium
+                   ${isActive ? 'bg-paper text-ink-900' : 'text-paper/75 hover:bg-ink-800'}`
+                }
+              >
+                {item.label}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden px-4 py-4 text-sm text-paper/60 lg:block">
+          <p className="font-medium text-paper">{profile?.fullName}</p>
+          <p className="mb-3">{profile?.role}</p>
+          <button onClick={signOut} className="underline hover:text-paper">
+            Sign out
+          </button>
+        </div>
+      </nav>
+
+      <div className="min-w-0 flex-1">
+        <header className="border-b border-line/20 bg-white px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-ink-900">{title}</h1>
+              {subtitle && <p className="text-sm text-ink-600">{subtitle}</p>}
+            </div>
+            {action}
+          </div>
+        </header>
+        <main className="px-5 py-5">{children}</main>
+      </div>
+    </div>
+  )
+}
