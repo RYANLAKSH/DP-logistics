@@ -18,6 +18,9 @@ import type {
 
 export interface ScanSubmission {
   assignmentId: string
+  /** Attempt ids for the two captures. The server requires both to exist. */
+  containerAttemptId?: string
+  chassisAttemptId?: string
   scannedContainerNo: string
   scannedChassisNo: string
   /** Client-generated. The idempotency key for the whole movement. */
@@ -28,6 +31,28 @@ export interface ScanSubmission {
    * physically been moved. A block is recorded either way.
    */
   commit?: boolean
+}
+
+export interface ScanEvidence {
+  /** Client-generated. The idempotency key for this attempt. */
+  attemptId: string
+  assignmentId: string
+  kind: 'CONTAINER' | 'CHASSIS' | 'VEHICLE_REG'
+  /** The value a human confirmed. Never the raw OCR text. */
+  scannedValue: string
+  /** The full frame, at full resolution. The crop is a UI aid, not evidence. */
+  image: Blob
+  /** Exactly what the engine produced, kept verbatim. */
+  ocrTextRaw?: string
+  ocrConfidence?: number
+  ocrEngine?: string
+  source: 'OCR_AUTO' | 'OCR_CONFIRMED' | 'MANUAL_ENTRY' | 'MANUAL_AUTHORISED'
+}
+
+export interface ScanRecord {
+  attemptId: string
+  /** The server's grading of this attempt. Advisory: the movement decides. */
+  result: string
 }
 
 export interface ExceptionSubmission {
@@ -48,6 +73,8 @@ export interface DataSource {
   listYards(): Promise<Yard[]>
   listMyAssignments(): Promise<Assignment[]>
   getAssignment(id: string): Promise<Assignment | null>
+  /** Uploads the evidence image and records the attempt, pass or fail. */
+  recordScan(input: ScanEvidence): Promise<ScanRecord>
   verifyMovement(input: ScanSubmission): Promise<VerificationResult>
   /** The next assignment this driver is permitted to work, or null. */
   nextAssignment(): Promise<Assignment | null>

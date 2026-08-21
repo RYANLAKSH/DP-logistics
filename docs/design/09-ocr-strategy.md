@@ -17,9 +17,17 @@ product exists to prevent.
 
 So the acceptance rule is comparative, never absolute:
 
-> A scan is accepted only if the expected value is the best match **and** it beats the
-> runner-up from the full manifest candidate set by a clear margin. If two candidates score
-> similarly, the scan is rejected and the driver confirms manually.
+> A scan is accepted only if the expected value is the best match **and** either the match
+> is **exact**, or it beats the runner-up from the full manifest candidate set by a clear
+> margin. A near match that scores close to another manifest value is rejected and the
+> driver confirms manually.
+
+**The exact-match carve-out is not a loophole — it is the rule working.** Manifest
+containers are numbered sequentially, so `CULVNSA2601795` and `CULVNSA2601796` differ by one
+character in fourteen and always score within a few percent of each other. Applying the
+margin to an exact read would refuse almost every correct scan in a real yard. This was
+found by running the real engine against a rendered plate, not by reasoning about it; the
+margin governs *ambiguity*, and an exact read is not ambiguous.
 
 Concretely, the chassis read is scored against **every** chassis in the active manifest, not
 just the expected one. If the expected value scores 0.86 and some other vehicle's chassis

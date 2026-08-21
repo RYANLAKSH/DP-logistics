@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { DataProvider } from '@/data/provider'
+import { OcrProviderScope } from '@/lib/ocr/provider'
 import { SessionProvider } from '@/lib/session'
 import { RequireAdmin, RequireAuth, RequireRole, RoleHome } from '@/routes/guards'
 import { LoginPage } from '@/routes/LoginPage'
@@ -92,11 +93,13 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <DataProvider>
-        <BrowserRouter>
-          <SessionProvider>
-            <AppRoutes />
-          </SessionProvider>
-        </BrowserRouter>
+        <OcrProviderScope>
+          <BrowserRouter>
+            <SessionProvider>
+              <AppRoutes />
+            </SessionProvider>
+          </BrowserRouter>
+        </OcrProviderScope>
       </DataProvider>
     </QueryClientProvider>
   )

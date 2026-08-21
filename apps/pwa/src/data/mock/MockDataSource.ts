@@ -7,7 +7,7 @@
  * the SECURITY DEFINER function and every screen is unchanged.
  */
 import type {
-  DataSource, ExceptionSubmission, ScanSubmission,
+  DataSource, ExceptionSubmission, ScanEvidence, ScanRecord, ScanSubmission,
 } from '../DataSource'
 import { pickNextAssignment } from '../nextAssignment'
 import type {
@@ -117,6 +117,16 @@ export class MockDataSource implements DataSource {
    * before the backend is wired, and it is deliberately written to be
    * replaceable rather than extended.
    */
+  async recordScan(input: ScanEvidence): Promise<ScanRecord> {
+    const a = this.assignments.find((x) => x.id === input.assignmentId)
+    const expected = input.kind === 'CONTAINER' ? a?.containerNo : a?.chassisNo
+    return delay({
+      attemptId: input.attemptId,
+      result: normalize(input.scannedValue) === normalize(expected ?? '')
+        ? 'PASS' : 'FAIL_MISMATCH',
+    })
+  }
+
   async verifyMovement(input: ScanSubmission): Promise<VerificationResult> {
     const a = this.assignments.find((x) => x.id === input.assignmentId)
     if (!a) throw new Error('assignment not found')

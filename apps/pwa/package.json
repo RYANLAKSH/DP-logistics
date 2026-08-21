@@ -5,14 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/prepare-ocr.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "node scripts/make-icons.mjs",
     "e2e": "node e2e/smoke.mjs",
-    "e2e:manifest": "node e2e/manifest.mjs"
+    "e2e:manifest": "node e2e/manifest.mjs",
+    "prepare:ocr": "node scripts/prepare-ocr.mjs",
+    "e2e:ocr": "node e2e/ocr.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
@@ -20,10 +22,12 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.1",
+    "tesseract.js": "^7.0.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.13",
+    "@tesseract.js-data/eng": "^1.0.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",

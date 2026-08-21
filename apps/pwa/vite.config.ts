@@ -18,6 +18,13 @@ export default defineConfig({
       registerType: 'prompt',
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // The OCR engine is ~7 MB and only drivers ever load it. Precaching it
+        // for everyone would put it in every manager's and auditor's install.
+        // sw.ts caches it at runtime instead, on first use, which reaches the
+        // same place — cached before the driver leaves signal — without
+        // shipping it to people who will never scan anything.
+        globIgnores: ['**/ocr/**'],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
       manifest: {
         name: 'DP Verify — Vehicle & Container Verification',

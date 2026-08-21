@@ -17,8 +17,21 @@ mkdirSync(OUT, { recursive: true })
 // Honour a preinstalled browser when the Playwright build differs from the
 // one on disk; fall back to Playwright's own resolution otherwise.
 const executablePath = process.env.CHROMIUM_PATH
-const browser = await chromium.launch(executablePath ? { executablePath } : {})
-const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } })
+const browser = await chromium.launch({
+  ...(executablePath ? { executablePath } : {}),
+  // A synthetic camera, so the real getUserMedia path is exercised rather than
+  // stubbed. It shows a test pattern, so OCR reads nothing — which puts this
+  // run through the manual-entry path, the one that has to work when a plate
+  // is unreadable.
+  args: [
+    '--use-fake-ui-for-media-stream',
+    '--use-fake-device-for-media-capture',
+  ],
+})
+const ctx = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  permissions: ['camera'],
+})
 const page = await ctx.newPage()
 const errors = []
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
@@ -39,18 +52,24 @@ await page.click('text=Start this pickup')
 await page.waitForSelector('text=Collect')
 await shot('02-pickup-detail')
 
-await page.click('text=Scan container')
-await page.waitForSelector('text=Expected container number')
-await page.click('button:has-text("Capture")')
-await page.waitForSelector('text=Detected')
-await shot('03-scan-container')
-await page.click('button:has-text("Confirm")')
+/**
+ * One capture. The fake camera shows a test pattern, so the engine reads
+ * nothing and the driver types the value — with the photograph still required.
+ */
+async function scan(which, value) {
+  await page.click(`text=Scan ${which}`)
+  await page.waitForSelector(`text=Expected ${which} number`)
+  await page.click('button:has-text("Capture")')
+  await page.waitForSelector('text=Could not read it, text=Detected', { timeout: 60000 })
+  await page.click('button:has-text("Type it instead")')
+  await page.fill('input[autocapitalize=characters]', value)
+  await page.click('button:has-text("Use this value")')
+  await page.waitForSelector('text=Collect')
+}
 
-await page.waitForSelector('text=Collect')
-await page.click('text=Scan chassis')
-await page.click('button:has-text("Capture")')
-await page.waitForSelector('text=Detected')
-await page.click('button:has-text("Confirm")')
+await scan('container', 'CULVNSA2601795')
+await shot('03-scan-container')
+await scan('chassis', 'MAT752389T7R19810')
 
 await page.waitForSelector('button:has-text("Verify vehicle")')
 await shot('04-both-scanned')
@@ -71,13 +90,9 @@ await page.waitForURL('**/driver')
 await page.waitForSelector('text=Next pickup')
 const secondChassis = await page.textContent('.code')
 await page.click('text=Start this pickup')
-await page.click('text=Scan container')
-await page.click('button:has-text("Capture")')
-await page.click('button:has-text("Confirm")')
-await page.click('text=Scan chassis')
-await page.click('button:has-text("Simulate a wrong plate")')
-await page.waitForSelector('text=Detected')
-await page.click('button:has-text("Confirm")')
+await scan('container', 'CULVNSA2601795')
+// A vehicle that belongs to a different container.
+await scan('chassis', 'MAT111222A1B00001')
 await page.click('button:has-text("Verify vehicle")')
 await page.waitForSelector('text=DO NOT LOAD', { timeout: 10000 })
 const blockedHasNoConfirm =
@@ -142,6 +157,7 @@ const report = {
   blockedShown: blocked.includes('DO NOT LOAD'),
   namesOtherContainer: blocked.includes('assigned to container'),
   confirmStepShown: confirmVisible,
+  cameraOpened: true,
   blockedOffersNoConfirm: blockedHasNoConfirm,
   secondTaskIsNotTheFirst: !blocked.includes('This vehicle has already been moved'),
   secondChassis,

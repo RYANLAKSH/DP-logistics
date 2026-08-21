@@ -7,7 +7,9 @@
  * If a method here ever needs one, the authorisation model has been broken.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { DataSource, ExceptionSubmission, ScanSubmission } from '../DataSource'
+import type {
+  DataSource, ExceptionSubmission, ScanEvidence, ScanRecord, ScanSubmission,
+} from '../DataSource'
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
@@ -116,6 +118,63 @@ export class SupabaseDataSource implements DataSource {
     return data ? toAssignment(data as TaskRow) : null
   }
 
+  /**
+   * Upload the photograph, then record the attempt.
+   *
+   * The hash is computed here, on the device, BEFORE upload. Hashing
+   * server-side after upload would only prove that the bytes in the bucket
+   * hash to what they hash to; hashing here and comparing later proves the
+   * image has not been altered in transit or at rest.
+   *
+   * The client does not choose the storage path — it asks for one.
+   */
+  async recordScan(input: ScanEvidence): Promise<ScanRecord> {
+    const path = unwrap(
+      await this.db.rpc('create_evidence_upload_path', {
+        p_assignment_id: input.assignmentId,
+        p_kind: input.kind,
+        p_attempt_id: input.attemptId,
+      }),
+    ) as unknown as string
+
+    const bytes = new Uint8Array(await input.image.arrayBuffer())
+    const digest = await crypto.subtle.digest('SHA-256', bytes)
+    const sha256 = [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, '0')).join('')
+
+    const upload = await this.db.storage
+      .from('evidence')
+      .upload(path, input.image, { contentType: 'image/jpeg', upsert: false })
+    // A duplicate path means this attempt was already uploaded — a retry after
+    // a dropped connection. That is success, not a failure to report.
+    if (upload.error && !/exists/i.test(upload.error.message)) {
+      throw new Error(upload.error.message)
+    }
+
+    const position = await currentPosition()
+
+    const data = unwrap(
+      await this.db.rpc('record_scan_attempt', {
+        p_attempt_id: input.attemptId,
+        p_assignment_id: input.assignmentId,
+        p_kind: input.kind,
+        p_scanned_value: input.scannedValue,
+        p_image_path: path,
+        p_image_sha256: sha256,
+        p_ocr_text_raw: input.ocrTextRaw ?? null,
+        p_ocr_confidence: input.ocrConfidence ?? null,
+        p_ocr_engine: input.ocrEngine ?? null,
+        p_value_source: input.source,
+        p_gps_lat: position?.lat ?? null,
+        p_gps_lng: position?.lng ?? null,
+        p_gps_accuracy_m: position?.accuracy ?? null,
+        p_gps_denied: position === null,
+      }),
+    ) as { attempt_id: string; result: string }
+
+    return { attemptId: data.attempt_id, result: data.result }
+  }
+
   async verifyMovement(input: ScanSubmission): Promise<VerificationResult> {
     // The authoritative decision. Note what is NOT sent: no expected values, no
     // outcome, no status. The server reads those from the manifest itself.
@@ -125,6 +184,8 @@ export class SupabaseDataSource implements DataSource {
         p_assignment_id: input.assignmentId,
         p_scanned_container_no: input.scannedContainerNo,
         p_scanned_chassis_no: input.scannedChassisNo,
+        p_container_attempt_id: input.containerAttemptId ?? null,
+        p_chassis_attempt_id: input.chassisAttemptId ?? null,
         p_commit: input.commit ?? true,
       }),
     )
@@ -562,4 +623,31 @@ async function readFunctionError(error: unknown): Promise<string> {
     // Fall through to the generic message.
   }
   return withContext.message ?? 'The manifest could not be parsed.'
+}
+
+/**
+ * Location, if the driver has granted it.
+ *
+ * Event-based only: read at the moment of a scan, never watched. This is
+ * evidence about a movement, not a way to follow an employee around a yard,
+ * and the difference has to be visible in the code as well as the policy.
+ *
+ * A refusal is recorded as a refusal and never blocks the scan. GPS is
+ * corroborating evidence; the photograph is the evidence.
+ */
+async function currentPosition(): Promise<
+  { lat: number; lng: number; accuracy: number } | null
+> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return null
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({
+        lat: p.coords.latitude,
+        lng: p.coords.longitude,
+        accuracy: p.coords.accuracy,
+      }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 30_000 },
+    )
+  })
 }

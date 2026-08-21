@@ -47,11 +47,14 @@ describe('verifyMovement', () => {
       p_assignment_id: 'a1',
       p_scanned_container_no: 'CULVNSA2601795',
       p_scanned_chassis_no: 'MAT752389T7R19810',
+      p_container_attempt_id: null,
+      p_chassis_attempt_id: null,
       p_commit: true,
     })
 
     // The security property, asserted directly: a client that could send an
-    // expected value or an outcome could make any scan pass.
+    // expected value or an outcome could make any scan pass. Attempt ids are
+    // references to rows the server itself wrote, not values it will trust.
     const keys = Object.keys(args as object)
     expect(keys.some((k) => k.includes('expected'))).toBe(false)
     expect(keys.some((k) => k.includes('outcome'))).toBe(false)

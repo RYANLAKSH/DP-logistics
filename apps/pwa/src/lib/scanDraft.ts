@@ -8,12 +8,21 @@ import { useCallback, useEffect, useState } from 'react'
  * one. Phase 3 persists to localStorage; phase 13 moves this to IndexedDB
  * alongside the image blobs, which localStorage cannot hold.
  */
+export type ValueSource = 'OCR_AUTO' | 'OCR_CONFIRMED' | 'MANUAL_ENTRY'
+
 export interface ScanDraft {
   containerValue?: string
   chassisValue?: string
-  /** How each value was obtained. Carried through to the audit record. */
-  containerSource?: 'OCR_AUTO' | 'MANUAL_ENTRY'
-  chassisSource?: 'OCR_AUTO' | 'MANUAL_ENTRY'
+  /**
+   * How each value was obtained. Carried through to the audit record, where
+   * distinguishing a clean read from a corrected one from a typed one is what
+   * makes the evidence meaningful years later.
+   */
+  containerSource?: ValueSource
+  chassisSource?: ValueSource
+  /** Attempt ids for the two captures. The server requires both to exist. */
+  containerAttemptId?: string
+  chassisAttemptId?: string
   /** Client-generated. The idempotency key for the eventual movement. */
   movementId: string
 }

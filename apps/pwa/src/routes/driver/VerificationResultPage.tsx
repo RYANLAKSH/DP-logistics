@@ -50,6 +50,8 @@ export function VerificationResultPage() {
         assignmentId,
         scannedContainerNo: draft.containerValue,
         scannedChassisNo: draft.chassisValue,
+        containerAttemptId: draft.containerAttemptId,
+        chassisAttemptId: draft.chassisAttemptId,
         movementId: draft.movementId,
         commit: false,
       })
@@ -82,6 +84,8 @@ export function VerificationResultPage() {
         assignmentId,
         scannedContainerNo: draft.containerValue,
         scannedChassisNo: draft.chassisValue,
+        containerAttemptId: draft.containerAttemptId,
+        chassisAttemptId: draft.chassisAttemptId,
         movementId: draft.movementId,
         commit: true,
       })
