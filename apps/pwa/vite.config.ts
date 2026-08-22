@@ -61,12 +61,9 @@ export default defineConfig({
       // implementation that would drift.
       '@shared': fileURLToPath(new URL('../../supabase/functions/_shared', import.meta.url)),
     },
-    // The repo still contains packages/mobile from the superseded Expo
-    // direction, which pins React 18 and hoists it to the workspace root.
-    // Without deduping, dependencies hoisted to the root resolve React 18
-    // while this app resolves its own React 19, and the two instances produce
-    // a null-internals crash on the first hook. Pin every 'react' import in
-    // this app to this app's copy.
+    // Kept after packages/mobile left the workspace: deduping React is cheap
+    // insurance against any future dependency hoisting a second copy, and the
+    // failure it prevents is an opaque null-internals crash on the first hook.
     dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   test: {

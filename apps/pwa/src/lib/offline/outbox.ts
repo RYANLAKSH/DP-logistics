@@ -1,5 +1,5 @@
 import type { DataSource } from '@/data/DataSource'
-import { db, type Capture, type OutboxItem, type OutboxState } from './db'
+import { db, hashBlob, type Capture, type OutboxItem, type OutboxState } from './db'
 import { noteFailure, noteSuccess } from './connectivity'
 
 /**
@@ -27,10 +27,13 @@ export function backoffFor(attempts: number): number {
  * because the container is sealed and the truck has gone.
  */
 export async function saveCapture(
-  capture: Omit<Capture, 'uploaded' | 'capturedAt'>,
+  capture: Omit<Capture, 'uploaded' | 'capturedAt' | 'sha256'>,
   upload: () => Promise<void>,
 ): Promise<{ uploaded: boolean }> {
-  await db.captures.put({ ...capture, uploaded: false, capturedAt: new Date().toISOString() })
+  const sha256 = await hashBlob(capture.blob)
+  await db.captures.put({
+    ...capture, sha256, uploaded: false, capturedAt: new Date().toISOString(),
+  })
   try {
     await upload()
     await db.captures.update(capture.attemptId, { uploaded: true })
@@ -81,6 +84,20 @@ export async function drainOne(
   try {
     for (const image of item.images) {
       if (image.uploaded) continue
+
+      // The photograph has been sitting in IndexedDB, which the phone's owner
+      // can edit. If it no longer hashes to what it hashed to when it was
+      // taken, it is not the evidence any more — refuse to upload it and say
+      // so, rather than certifying a substituted image.
+      if (image.sha256 && (await hashBlob(image.blob)) !== image.sha256) {
+        await db.outbox.update(item.id, {
+          state: 'rejected',
+          lastError:
+            'The stored photograph no longer matches the one that was taken. It has not been uploaded. Report this to your manager.',
+        })
+        return 'rejected'
+      }
+
       await data.recordScan({
         attemptId: image.attemptId,
         assignmentId: item.assignmentId,

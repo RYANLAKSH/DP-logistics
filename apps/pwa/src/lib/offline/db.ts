@@ -28,6 +28,8 @@ export interface OutboxImage {
   kind: 'CONTAINER' | 'CHASSIS'
   blob: Blob
   attemptId: string
+  /** The hash taken at capture. Re-checked before upload — see outbox.ts. */
+  sha256?: string
   scannedValue: string
   ocrTextRaw?: string
   ocrConfidence?: number
@@ -82,6 +84,22 @@ export interface Capture {
   source: 'OCR_AUTO' | 'OCR_CONFIRMED' | 'MANUAL_ENTRY'
   uploaded: boolean
   capturedAt: string
+  /**
+   * Hashed at CAPTURE, not at upload.
+   *
+   * A queued photograph sits in IndexedDB, which the person holding the phone
+   * can edit with devtools. Hashing only at upload would happily certify a
+   * substituted image. Hashing at capture and re-checking before send makes
+   * the substitution detectable — the two hashes disagree, and the mismatch is
+   * reported rather than uploaded.
+   */
+  sha256: string
+}
+
+/** SHA-256 of a blob, as lowercase hex. */
+export async function hashBlob(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 class DpDatabase extends Dexie {

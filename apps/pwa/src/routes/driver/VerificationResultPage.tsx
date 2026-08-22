@@ -111,6 +111,7 @@ export function VerificationResultPage() {
             ocrEngine: c.ocrEngine,
             source: c.source,
             uploaded: c.uploaded,
+            sha256: c.sha256,
           })),
           gps: await currentFix(),
         })

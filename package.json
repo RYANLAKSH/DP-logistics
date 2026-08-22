@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/shared-rules",
+    "packages/fixtures"
   ],
   "scripts": {
     "test": "vitest run && npm run test --workspaces --if-present",

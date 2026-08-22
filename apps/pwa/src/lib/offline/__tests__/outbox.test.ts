@@ -17,6 +17,10 @@ vi.mock('../db', async () => {
         __updates: updates,
       },
     },
+    // A deterministic stand-in for crypto.subtle. Keyed on size rather than
+    // content because jsdom's Blob implements neither text() nor
+    // arrayBuffer() — and the test is about the COMPARISON, not the digest.
+    hashBlob: async (blob: Blob) => `h:${blob.size}`,
   }
 })
 
@@ -29,9 +33,9 @@ function item(overrides: Partial<OutboxItem> = {}): OutboxItem {
     scannedContainerNo: 'CULVNSA2601795',
     scannedChassisNo: 'MAT752389T7R19810',
     images: [
-      { kind: 'CONTAINER', blob: new Blob(['c']), attemptId: 'at-c',
+      { kind: 'CONTAINER', blob: new Blob(['c']), attemptId: 'at-c', sha256: 'h:1',
         scannedValue: 'CULVNSA2601795', source: 'OCR_AUTO', uploaded: false },
-      { kind: 'CHASSIS', blob: new Blob(['h']), attemptId: 'at-h',
+      { kind: 'CHASSIS', blob: new Blob(['h']), attemptId: 'at-h', sha256: 'h:1',
         scannedValue: 'MAT752389T7R19810', source: 'MANUAL_ENTRY', uploaded: false },
     ],
     queuedAt: new Date().toISOString(),
@@ -143,5 +147,36 @@ describe('staleness', () => {
       queuedAt: new Date(now - STALE_AFTER_MS - 1000).toISOString(),
     })
     expect(isStale(done, now)).toBe(false)
+  })
+})
+
+
+describe('queue tampering', () => {
+  it('refuses to upload a photograph that was swapped in IndexedDB', async () => {
+    // A queued photograph sits in storage the phone's owner can edit. Hashing
+    // only at upload would happily certify a substituted image.
+    const data = fakeData()
+    const tampered = item()
+    tampered.images[0]!.blob = new Blob(['a different photograph'])
+
+    expect(await drainOne(data, tampered)).toBe('rejected')
+    expect((data as never as { recordScan: ReturnType<typeof vi.fn> })
+      .recordScan).not.toHaveBeenCalled()
+    expect((data as never as { verifyMovement: ReturnType<typeof vi.fn> })
+      .verifyMovement).not.toHaveBeenCalled()
+  })
+
+  it('uploads normally when the photograph is untouched', async () => {
+    const data = fakeData()
+    expect(await drainOne(data, item())).toBe('confirmed')
+  })
+
+  it('does not block an item captured before hashing existed', async () => {
+    // Defensive: an item queued by an older build carries no hash. Refusing it
+    // would strand real evidence over a version boundary.
+    const data = fakeData()
+    const legacy = item()
+    for (const image of legacy.images) delete image.sha256
+    expect(await drainOne(data, legacy)).toBe('confirmed')
   })
 })

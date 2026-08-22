@@ -1,0 +1,20 @@
+# Security headers.
+#
+# Netlify/Cloudflare Pages format. The same directives belong in whatever edge
+# serves this — nginx, CloudFront, Vercel — and they are part of the security
+# model rather than an optional hardening pass: the session's refresh token
+# lives in localStorage, which is XSS-readable by design, so the CSP is what
+# stands between an injected script and every driver's session.
+
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  # wasm-unsafe-eval, NOT unsafe-eval: the OCR engine is WebAssembly, and the
+  # narrower directive permits exactly that and nothing else.
+  # connect-src must list the Supabase project origin at deploy time.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

@@ -67,6 +67,11 @@ one is expensive to reverse once code exists.
 NestJS + Postgres API, framed around a DO-issued *pickup report* rather than a daily
 manifest. That work is prior art and is **superseded** by this directory for the PWA build.
 
+`packages/mobile` and `packages/api` remain in the tree as prior art but are no
+longer npm workspaces: the Expo package alone accounted for all 23 dependency
+advisories in the repository, including a critical one, while being neither
+deployed nor imported. See [phase-14-security-review.md](phase-14-security-review.md) §F1.
+
 Two things carry over essentially unchanged, because they are properties of the domain
 rather than of the stack, and they are cited rather than restated here:
 
