@@ -66,6 +66,24 @@ export default defineConfig({
     // failure it prevents is an opaque null-internals crash on the first hook.
     dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
+  build: {
+    // The OCR engine dominates a driver's download and is fetched separately
+    // by the worker, so the JS budget here is about everything else.
+    chunkSizeWarningLimit: 400,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split by change cadence: the framework moves rarely, Supabase
+          // moves on its own schedule, and the app moves every deploy. Keeping
+          // them apart means a routine release does not invalidate the two
+          // largest cached chunks on every driver's phone.
+          react: ['react', 'react-dom', 'react-router-dom'],
+          supabase: ['@supabase/supabase-js'],
+          query: ['@tanstack/react-query'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

@@ -1,5 +1,7 @@
+import { lazy, Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { Spinner } from '@/components/States'
 import { DataProvider } from '@/data/provider'
 import { OcrProviderScope } from '@/lib/ocr/provider'
 import { UpdateBanner } from '@/lib/serviceWorker'
@@ -7,22 +9,51 @@ import { SessionProvider } from '@/lib/session'
 import { RequireAdmin, RequireAuth, RequireRole, RoleHome } from '@/routes/guards'
 import { LoginPage } from '@/routes/LoginPage'
 import { NotFoundPage, OfflinePage, UnauthorizedPage } from '@/routes/ErrorPages'
-import { DriverHomePage } from '@/routes/driver/DriverHomePage'
-import { PickupDetailPage } from '@/routes/driver/PickupDetailPage'
-import { ScanPage } from '@/routes/driver/ScanPage'
-import { VerificationResultPage } from '@/routes/driver/VerificationResultPage'
-import { ExceptionReportPage } from '@/routes/driver/ExceptionReportPage'
-import { CompletedJobsPage } from '@/routes/driver/CompletedJobsPage'
-import { SyncPage } from '@/routes/driver/SyncPage'
-import { DashboardPage } from '@/routes/manager/DashboardPage'
-import { ManifestUploadPage } from '@/routes/manager/ManifestUploadPage'
-import { ManifestPreviewPage } from '@/routes/manager/ManifestPreviewPage'
-import { ManifestHistoryPage } from '@/routes/manager/ManifestHistoryPage'
-import { AssignmentsPage } from '@/routes/manager/AssignmentsPage'
-import { ExceptionsPage } from '@/routes/manager/ExceptionsPage'
-import { UsersPage } from '@/routes/manager/UsersPage'
-import { AuditLogPage } from '@/routes/manager/AuditLogPage'
-import { MovementDetailPage } from '@/routes/manager/MovementDetailPage'
+
+/**
+ * Routes are split at the role boundary.
+ *
+ * A driver's phone should not download the manifest preview grid, the audit
+ * table or the realtime board — surfaces they can never open. Before this the
+ * whole app was one 726 KB chunk, every byte of it on the critical path of a
+ * shift start on a mid-range handset over yard Wi-Fi.
+ *
+ * Login and the error pages stay eager: they are the first thing rendered, and
+ * a lazy boundary there would trade a small download for a visible flash.
+ */
+const DriverHomePage = lazy(() => import('@/routes/driver/DriverHomePage')
+  .then((m) => ({ default: m.DriverHomePage })))
+const PickupDetailPage = lazy(() => import('@/routes/driver/PickupDetailPage')
+  .then((m) => ({ default: m.PickupDetailPage })))
+const ScanPage = lazy(() => import('@/routes/driver/ScanPage')
+  .then((m) => ({ default: m.ScanPage })))
+const VerificationResultPage = lazy(() => import('@/routes/driver/VerificationResultPage')
+  .then((m) => ({ default: m.VerificationResultPage })))
+const ExceptionReportPage = lazy(() => import('@/routes/driver/ExceptionReportPage')
+  .then((m) => ({ default: m.ExceptionReportPage })))
+const CompletedJobsPage = lazy(() => import('@/routes/driver/CompletedJobsPage')
+  .then((m) => ({ default: m.CompletedJobsPage })))
+const SyncPage = lazy(() => import('@/routes/driver/SyncPage')
+  .then((m) => ({ default: m.SyncPage })))
+
+const DashboardPage = lazy(() => import('@/routes/manager/DashboardPage')
+  .then((m) => ({ default: m.DashboardPage })))
+const ManifestUploadPage = lazy(() => import('@/routes/manager/ManifestUploadPage')
+  .then((m) => ({ default: m.ManifestUploadPage })))
+const ManifestPreviewPage = lazy(() => import('@/routes/manager/ManifestPreviewPage')
+  .then((m) => ({ default: m.ManifestPreviewPage })))
+const ManifestHistoryPage = lazy(() => import('@/routes/manager/ManifestHistoryPage')
+  .then((m) => ({ default: m.ManifestHistoryPage })))
+const AssignmentsPage = lazy(() => import('@/routes/manager/AssignmentsPage')
+  .then((m) => ({ default: m.AssignmentsPage })))
+const ExceptionsPage = lazy(() => import('@/routes/manager/ExceptionsPage')
+  .then((m) => ({ default: m.ExceptionsPage })))
+const UsersPage = lazy(() => import('@/routes/manager/UsersPage')
+  .then((m) => ({ default: m.UsersPage })))
+const AuditLogPage = lazy(() => import('@/routes/manager/AuditLogPage')
+  .then((m) => ({ default: m.AuditLogPage })))
+const MovementDetailPage = lazy(() => import('@/routes/manager/MovementDetailPage')
+  .then((m) => ({ default: m.MovementDetailPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +69,7 @@ const queryClient = new QueryClient({
 
 export function AppRoutes() {
   return (
+    <Suspense fallback={<Spinner label="Loading" />}>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/403" element={<UnauthorizedPage />} />
@@ -91,6 +123,7 @@ export function AppRoutes() {
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </Suspense>
   )
 }
 
