@@ -8,7 +8,7 @@ begin
   select id into v_manifest from manifests
    where yard_id = '00000000-0000-0000-0000-0000000000b1' and status = 'PUBLISHED';
   select id into v_container from containers
-   where manifest_id = v_manifest and container_no = 'CULVNSA2601795';
+   where manifest_id = v_manifest and container_no = 'TRHU8755445';
 
   perform tst.ok(v_manifest is not null, 'fixture manifest published');
   perform tst.eq((select expected_vehicle_count from containers where id = v_container), 2,
@@ -19,7 +19,7 @@ begin
   -- A chassis may not be assigned to two active containers in one manifest.
   perform tst.throws(format($q$
       insert into vehicle_assignments (manifest_id, container_id, chassis_no, sequence_no)
-      values ('%s', '%s', 'MAT111222A1B00001', 3)$q$, v_manifest, v_container),
+      values ('%s', '%s', 'MAT752389T7R18439', 3)$q$, v_manifest, v_container),
     'duplicate chassis within a manifest must be rejected');
 
   -- Two vehicles may not occupy the same slot.
@@ -30,7 +30,7 @@ begin
 
   -- The same container may not appear twice in one manifest.
   perform tst.throws(format($q$
-      insert into containers (manifest_id, container_no) values ('%s', 'CULVNSA2601795')$q$,
+      insert into containers (manifest_id, container_no) values ('%s', 'TRHU8755445')$q$,
       v_manifest),
     'duplicate container within a manifest must be rejected');
 

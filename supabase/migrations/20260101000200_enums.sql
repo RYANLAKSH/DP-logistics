@@ -48,7 +48,12 @@ create type attempt_result as enum (
 create type verification_outcome as enum (
   'MATCH',
   'WRONG_CONTAINER',
-  'WRONG_CHASSIS',
+  -- There is deliberately no WRONG_CHASSIS. A scanned chassis is either on the
+  -- manifest against a different container (WRONG_VEHICLE) or on no line at
+  -- all (CHASSIS_NOT_ON_MANIFEST); one chassis belongs to exactly one
+  -- container, so there is no third case for a value to name. It existed, the
+  -- engine could never return it, and an unreachable outcome is an invitation
+  -- to write a branch that contradicts the rule.
   'WRONG_VEHICLE',            -- chassis belongs to a different container
   'CHASSIS_NOT_ON_MANIFEST',
   'CONTAINER_NOT_ON_MANIFEST',

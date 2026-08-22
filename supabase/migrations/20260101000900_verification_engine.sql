@@ -493,7 +493,22 @@ begin
   -- reports WRONG_VEHICLE, because that is the more serious and more
   -- actionable fact.
   if m.status <> 'PUBLISHED' then
-    v_outcome := 'MANIFEST_NOT_PUBLISHED';
+    -- Two very different situations reach here, and the driver's next move is
+    -- different for each. A manifest that was REPLACED means the phone is
+    -- working from a cached version — the fix is to sync, and it is the normal
+    -- outcome of a manager correcting the day's plan while a driver is out of
+    -- signal. Any other non-published state is a manifest problem the driver
+    -- cannot fix alone. Reporting both as MANIFEST_NOT_PUBLISHED sent everyone
+    -- to the office for what a pull-to-refresh would have solved.
+    if exists (select 1 from public.manifests newer
+                where newer.yard_id = m.yard_id
+                  and newer.operating_date = m.operating_date
+                  and newer.status = 'PUBLISHED'
+                  and newer.version > m.version) then
+      v_outcome := 'MANIFEST_SUPERSEDED';
+    else
+      v_outcome := 'MANIFEST_NOT_PUBLISHED';
+    end if;
 
   elsif not app.user_has_yard(drv.id, m.yard_id) then
     v_outcome := 'DRIVER_NOT_AUTHORISED';
@@ -590,7 +605,7 @@ begin
   end if;
 
   v_result := case when v_outcome = 'MATCH' then 'PASS'
-                   when v_outcome in ('WRONG_CONTAINER','WRONG_CHASSIS','WRONG_VEHICLE',
+                   when v_outcome in ('WRONG_CONTAINER','WRONG_VEHICLE',
                                       'CHASSIS_NOT_ON_MANIFEST','CONTAINER_NOT_ON_MANIFEST')
                         then 'FAIL_MISMATCH'
                    else 'FAIL_RULE' end;
@@ -643,9 +658,16 @@ begin
       drv.id
     ) returning id into v_exception_id;
 
+    -- CANCELLED is excluded as well as COMPLETED. A withdrawn vehicle that a
+    -- driver then scans would otherwise be quietly moved back into the day's
+    -- work as an EXCEPTION — a state a manager can resolve back into service.
+    -- It also re-occupies the chassis in the uniqueness index, so the corrected
+    -- assignment that was supposed to replace it can no longer be created. The
+    -- block is still recorded; what must not change is the fact that ops took
+    -- this vehicle off the manifest.
     update public.vehicle_assignments
        set status = 'EXCEPTION', updated_at = now()
-     where id = a.id and status <> 'COMPLETED';
+     where id = a.id and status not in ('COMPLETED', 'CANCELLED');
 
     perform app.audit('movement.blocked', 'vehicle_assignment', a.id, null,
       jsonb_build_object('outcome', v_outcome, 'attempt_id', v_final_id,

@@ -3,9 +3,9 @@
 --
 -- The business scenario from the build plan, run end to end, in order.
 --
---   Container CULVNSA2601795
---     Vehicle 1  MAT752389T7R19810
---     Vehicle 2  MAT464844TSR09249
+--   Container TRHU8755445
+--     Vehicle 1  MAT752389T7R20588
+--     Vehicle 2  MAT464844TSR09113
 --
 -- Every step below corresponds to a numbered acceptance criterion. If this
 -- file passes, the system does what the business asked for.
@@ -23,8 +23,8 @@ insert into manifest_imports (
   current_date + 100, 'acceptance.csv', 'p/q/acc.csv', repeat('1', 64), 512,
   'READY', 4, 4, 0, '00000000-0000-0000-0000-0000000000c2',
   '[
-    {"row_no":1,"container_no":"CULVNSA2601795","chassis_no":"MAT752389T7R19810","sequence_no":1},
-    {"row_no":2,"container_no":"CULVNSA2601795","chassis_no":"MAT464844TSR09249","sequence_no":2},
+    {"row_no":1,"container_no":"TRHU8755445","chassis_no":"MAT752389T7R20588","sequence_no":1},
+    {"row_no":2,"container_no":"TRHU8755445","chassis_no":"MAT464844TSR09113","sequence_no":2},
     {"row_no":3,"container_no":"CULVNSA2601799","chassis_no":"MAT111333E1E00001","sequence_no":1},
     {"row_no":4,"container_no":"CULVNSA2601799","chassis_no":"MAT111333E1E00002","sequence_no":2}
   ]'::jsonb
@@ -48,9 +48,9 @@ do $$
 declare t record;
 begin
   select * into t from v_driver_tasks
-   where container_no = 'CULVNSA2601795' and sequence_no = 1
+   where container_no = 'TRHU8755445' and sequence_no = 1
      and operating_date = current_date + 100;
-  perform tst.eq(t.chassis_no, 'MAT752389T7R19810', 'vehicle 1 of 2 is the first task');
+  perform tst.eq(t.chassis_no, 'MAT752389T7R20588', 'vehicle 1 of 2 is the first task');
   perform tst.eq(t.expected_vehicle_count, 2, 'the container takes two vehicles');
   perform tst.eq(t.container_filled::int, 0, 'none loaded yet');
 end $$;
@@ -58,10 +58,10 @@ end $$;
 -- ============ 3-8. Correct container, correct chassis, completed =============
 do $$
 declare
-  v1 uuid := tst.assignment_on(current_date + 100, 'MAT752389T7R19810');
+  v1 uuid := tst.assignment_on(current_date + 100, 'MAT752389T7R20588');
   r  jsonb;
 begin
-  r := tst.scan_and_verify(v1, 'CULVNSA2601795', 'MAT752389T7R19810');
+  r := tst.scan_and_verify(v1, 'TRHU8755445', 'MAT752389T7R20588');
   perform tst.eq(r ->> 'outcome', 'MATCH', '3-6: both scans match');
   perform tst.eq(r ->> 'status', 'COMPLETED', '7: the movement completes');
   perform tst.eq((select status::text from vehicle_assignments where id = v1),
@@ -77,24 +77,24 @@ do $$
 declare t record;
 begin
   select * into t from v_driver_tasks
-   where container_no = 'CULVNSA2601795' and sequence_no = 2
+   where container_no = 'TRHU8755445' and sequence_no = 2
      and operating_date = current_date + 100;
-  perform tst.eq(t.chassis_no, 'MAT464844TSR09249', '10: vehicle 2 is next');
+  perform tst.eq(t.chassis_no, 'MAT464844TSR09113', '10: vehicle 2 is next');
   perform tst.eq(t.container_filled::int, 1, '10: and the container shows 1 of 2');
 end $$;
 
 -- ============ 11-12. The second vehicle completes the container ==============
 do $$
 declare
-  v2 uuid := tst.assignment_on(current_date + 100, 'MAT464844TSR09249');
+  v2 uuid := tst.assignment_on(current_date + 100, 'MAT464844TSR09113');
   r  jsonb;
 begin
-  r := tst.scan_and_verify(v2, 'CULVNSA2601795', 'MAT464844TSR09249');
+  r := tst.scan_and_verify(v2, 'TRHU8755445', 'MAT464844TSR09113');
   perform tst.eq(r ->> 'outcome', 'MATCH', '11: the second vehicle verifies');
   perform tst.eq((r ->> 'container_filled')::int, 2, '12: the container is complete');
 
   perform tst.ok((select is_complete from v_container_progress
-                   where container_no = 'CULVNSA2601795'
+                   where container_no = 'TRHU8755445'
                      and operating_date = current_date + 100),
                  '12: and reports itself complete');
 end $$;
@@ -108,7 +108,7 @@ begin
   perform tst.eq((b -> 'counters' ->> 'vehiclesCompleted')::int, 2, '13: two completed');
   perform tst.ok(
     exists (select 1 from jsonb_array_elements(b -> 'containers') c
-             where c ->> 'container_no' = 'CULVNSA2601795'
+             where c ->> 'container_no' = 'TRHU8755445'
                and (c ->> 'filled')::int = 2),
     '13: the board shows the container full');
 end $$;
@@ -124,7 +124,7 @@ declare
   r jsonb;
 begin
   ------------------------------------------------------------ wrong container
-  r := tst.scan_and_verify(a, 'CULVNSA2601795', 'MAT111333E1E00001');
+  r := tst.scan_and_verify(a, 'TRHU8755445', 'MAT111333E1E00001');
   perform tst.eq(r ->> 'outcome', 'WRONG_CONTAINER', 'wrong container is blocked');
 
   -------------------------------------------------------------- wrong chassis
@@ -135,13 +135,13 @@ begin
                  'and the driver is told where that vehicle belongs');
 
   ------------------------------------------------------------- both wrong
-  r := tst.scan_and_verify(a, 'CULVNSA2601795', 'MAT464844TSR09249');
+  r := tst.scan_and_verify(a, 'TRHU8755445', 'MAT464844TSR09113');
   perform tst.eq(r ->> 'outcome', 'WRONG_CONTAINER',
                  'both wrong reports the container first');
 
   ------------------------------------------------------- already completed
-  r := tst.scan_and_verify(tst.assignment_on(current_date + 100, 'MAT752389T7R19810'),
-                           'CULVNSA2601795', 'MAT752389T7R19810');
+  r := tst.scan_and_verify(tst.assignment_on(current_date + 100, 'MAT752389T7R20588'),
+                           'TRHU8755445', 'MAT752389T7R20588');
   perform tst.eq(r ->> 'outcome', 'ALREADY_COMPLETED',
                  'a completed vehicle cannot be moved twice');
 
@@ -214,7 +214,7 @@ begin
   select id into c from containers where manifest_id = m limit 1;
   perform tst.throws(format($q$
     insert into vehicle_assignments (manifest_id, container_id, chassis_no, sequence_no)
-    values ('%s', '%s', 'MAT752389T7R19810', 5)$q$, m, c),
+    values ('%s', '%s', 'MAT752389T7R20588', 5)$q$, m, c),
     'a chassis cannot be assigned twice in one manifest');
 end $$;
 
@@ -224,7 +224,7 @@ declare
   mv movement_events;
 begin
   select * into mv from movement_events
-   where assignment_id = tst.assignment_on(current_date + 100, 'MAT752389T7R19810')
+   where assignment_id = tst.assignment_on(current_date + 100, 'MAT752389T7R20588')
      and status = 'COMPLETED'
    limit 1;
 
@@ -286,7 +286,7 @@ begin
   -- A full container must not appear.
   perform tst.ok(
     not exists (select 1 from jsonb_array_elements(r -> 'partiallyLoaded') c
-                 where c ->> 'containerNo' = 'CULVNSA2601795'),
+                 where c ->> 'containerNo' = 'TRHU8755445'),
     'a complete container is not reported');
 
   perform tst.ok(r ? 'openExceptions', 'it counts open exceptions');

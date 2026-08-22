@@ -74,7 +74,6 @@ export function outcomeStatusKey(outcome: string): StatusKey {
 export const OUTCOME_MESSAGE: Record<string, string> = {
   MATCH: 'Both values match the manifest.',
   WRONG_CONTAINER: 'This is not the container assigned to this vehicle.',
-  WRONG_CHASSIS: 'This is not the vehicle assigned to this container.',
   WRONG_VEHICLE: 'This vehicle is assigned to a different container.',
   CHASSIS_NOT_ON_MANIFEST: 'This chassis number is not on today’s manifest.',
   CONTAINER_NOT_ON_MANIFEST: 'This container is not on today’s manifest.',

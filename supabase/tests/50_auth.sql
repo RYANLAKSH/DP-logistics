@@ -112,20 +112,20 @@ select tst.login('00000000-0000-0000-0000-0000000000c3');   -- driver1
 do $$
 declare e exceptions;
 begin
-  -- MAT111222A1B00002 is the one the earlier suite left uncompleted.
+  -- MAT464844TSR09257 is the one the earlier suite left uncompleted.
   e := raise_exception('DAMAGED_CONTAINER_MARKING', 'Plate painted over',
-                       tst.assignment_id('MAT111222A1B00002'));
+                       tst.assignment_id('MAT464844TSR09257'));
   perform tst.eq(e.status::text, 'OPEN', 'a raised exception starts OPEN');
   perform tst.eq(e.raised_by, auth.uid(), 'the raiser is taken from the session');
   perform tst.eq((select status::text from vehicle_assignments
-                   where id = tst.assignment_id('MAT111222A1B00002')),
+                   where id = tst.assignment_id('MAT464844TSR09257')),
                  'EXCEPTION', 'the assignment is parked, not completed');
 
   -- Raising one against an already-completed assignment must not undo it.
   perform raise_exception('OTHER', 'raised after the fact',
-                          tst.assignment_id('MAT752389T7R19810'));
+                          tst.assignment_id('MAT752389T7R20588'));
   perform tst.eq((select status::text from vehicle_assignments
-                   where id = tst.assignment_id('MAT752389T7R19810')),
+                   where id = tst.assignment_id('MAT752389T7R20588')),
                  'COMPLETED', 'a completed movement is never reopened by an exception');
 
   perform tst.throws(

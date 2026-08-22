@@ -105,25 +105,15 @@ export function ManifestUploadPage() {
             />
             <p className="text-sm text-ink-600">
               The list exactly as it arrives: container number written once per pair,
-              a running SR column, no sequence column. The workbook holds two plans
-              for the same 40 vehicles — the current one, and the earlier one it
-              replaced, which still carries a container number that fails its own
-              check digit.
+              a running SR column, no sequence column, blank rows between pairs.
             </p>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => { setError(null); setFile(samplePickupListFile('current')) }}
-              >
-                Load the current plan
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => { setError(null); setFile(samplePickupListFile('earlier')) }}
-              >
-                Load the earlier plan
-              </Button>
-            </div>
+            <Button
+              className="mt-3"
+              variant="secondary"
+              onClick={() => { setError(null); setFile(samplePickupListFile()) }}
+            >
+              Load the pickup list
+            </Button>
           </Card>
         )}
 

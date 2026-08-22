@@ -78,7 +78,6 @@ export interface Assignment {
 export type VerificationOutcome =
   | 'MATCH'
   | 'WRONG_CONTAINER'
-  | 'WRONG_CHASSIS'
   | 'WRONG_VEHICLE'
   | 'CHASSIS_NOT_ON_MANIFEST'
   | 'CONTAINER_NOT_ON_MANIFEST'

@@ -2,9 +2,9 @@
 -- Test fixtures and assertion helpers. Local test harness only.
 --
 -- The business scenario is the one from the build plan:
---   container CULVNSA2601795
---     vehicle 1  MAT752389T7R19810
---     vehicle 2  MAT464844TSR09249
+--   container TRHU8755445
+--     vehicle 1  MAT752389T7R20588
+--     vehicle 2  MAT464844TSR09113
 -- ---------------------------------------------------------------------------
 
 create schema if not exists tst;
@@ -123,10 +123,10 @@ insert into manifest_imports (
   repeat('a', 64), 512, 'READY', 4, 4, 0,
   '00000000-0000-0000-0000-0000000000c2',
   '[
-    {"row_no":1,"container_no":"CULVNSA2601795","chassis_no":"MAT752389T7R19810","sequence_no":1},
-    {"row_no":2,"container_no":"CULVNSA2601795","chassis_no":"MAT464844TSR09249","sequence_no":2},
-    {"row_no":3,"container_no":"CULVNSA2601796","chassis_no":"MAT111222A1B00001","sequence_no":1},
-    {"row_no":4,"container_no":"CULVNSA2601796","chassis_no":"MAT111222A1B00002","sequence_no":2}
+    {"row_no":1,"container_no":"TRHU8755445","chassis_no":"MAT752389T7R20588","sequence_no":1},
+    {"row_no":2,"container_no":"TRHU8755445","chassis_no":"MAT464844TSR09113","sequence_no":2},
+    {"row_no":3,"container_no":"CAIU4330430","chassis_no":"MAT752389T7R18439","sequence_no":1},
+    {"row_no":4,"container_no":"CAIU4330430","chassis_no":"MAT464844TSR09257","sequence_no":2}
   ]'::jsonb
 );
 

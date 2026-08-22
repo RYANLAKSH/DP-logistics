@@ -3,8 +3,8 @@
 -- in its specified evaluation order, plus idempotency and authorisation.
 --
 -- Scenario (from the build plan):
---   CULVNSA2601795  <- MAT752389T7R19810 (slot 1), MAT464844TSR09249 (slot 2)
---   CULVNSA2601796  <- MAT111222A1B00001 (slot 1), MAT111222A1B00002 (slot 2)
+--   TRHU8755445  <- MAT752389T7R20588 (slot 1), MAT464844TSR09113 (slot 2)
+--   CAIU4330430  <- MAT752389T7R18439 (slot 1), MAT464844TSR09257 (slot 2)
 -- ---------------------------------------------------------------------------
 set role authenticated;
 select tst.login('00000000-0000-0000-0000-0000000000c3');   -- driver1, Nhava Sheva
@@ -12,12 +12,12 @@ select tst.login('00000000-0000-0000-0000-0000000000c3');   -- driver1, Nhava Sh
 -- ============================ FAILURE CASES ================================
 do $$
 declare
-  a1 uuid := tst.assignment_id('MAT111222A1B00001');   -- belongs to CULVNSA2601796
+  a1 uuid := tst.assignment_id('MAT752389T7R18439');   -- belongs to CAIU4330430
   r  jsonb;
 begin
   ---------------------------------------------------------------- wrong container
   -- Correct vehicle, but scanned a container that belongs to another vehicle.
-  r := tst.scan_and_verify(a1, 'CULVNSA2601795', 'MAT111222A1B00001');
+  r := tst.scan_and_verify(a1, 'TRHU8755445', 'MAT752389T7R18439');
   perform tst.eq(r ->> 'outcome', 'WRONG_CONTAINER', 'scanning another container blocks');
   perform tst.eq(r ->> 'status', 'BLOCKED', 'a wrong container is blocked, not warned');
   perform tst.ok((r ->> 'movement_id') is null, 'no movement is recorded for a block');
@@ -26,31 +26,31 @@ begin
                  'the response says the scanned container is on the manifest');
 
   ------------------------------------------------------ container not on manifest
-  r := tst.scan_and_verify(a1, 'CULVNSA9999999', 'MAT111222A1B00001');
+  r := tst.scan_and_verify(a1, 'CULVNSA9999999', 'MAT752389T7R18439');
   perform tst.eq(r ->> 'outcome', 'CONTAINER_NOT_ON_MANIFEST',
                  'an unknown container is distinguished from a wrong one');
 
   ------------------------------------------------------------------ wrong vehicle
   -- THE case the product exists for: right container, vehicle assigned elsewhere.
-  r := tst.scan_and_verify(a1, 'CULVNSA2601796', 'MAT752389T7R19810');
+  r := tst.scan_and_verify(a1, 'CAIU4330430', 'MAT752389T7R20588');
   perform tst.eq(r ->> 'outcome', 'WRONG_VEHICLE', 'a vehicle from another container blocks');
-  perform tst.eq(r -> 'detail' ->> 'scanned_vehicle_belongs_to_container', 'CULVNSA2601795',
+  perform tst.eq(r -> 'detail' ->> 'scanned_vehicle_belongs_to_container', 'TRHU8755445',
                  'the driver is told which container that vehicle is actually for');
 
   ------------------------------------------------------- chassis not on manifest
-  r := tst.scan_and_verify(a1, 'CULVNSA2601796', 'MAT000000X0X00000');
+  r := tst.scan_and_verify(a1, 'CAIU4330430', 'MAT000000X0X00000');
   perform tst.eq(r ->> 'outcome', 'CHASSIS_NOT_ON_MANIFEST',
                  'an unknown chassis is distinguished from a misdirected one');
 
   -------------------------------------------------------------- evidence missing
   perform tst.eq(
-    verify_movement(gen_random_uuid(), a1, 'CULVNSA2601796', 'MAT111222A1B00001',
+    verify_movement(gen_random_uuid(), a1, 'CAIU4330430', 'MAT752389T7R18439',
                     null, null, null, 'device-driver-1') ->> 'outcome',
     'EVIDENCE_MISSING',
     'a movement without evidence cannot be verified');
 
   ------------------------------------------------------------ unapproved device
-  r := tst.scan_and_verify(a1, 'CULVNSA2601796', 'MAT111222A1B00001',
+  r := tst.scan_and_verify(a1, 'CAIU4330430', 'MAT752389T7R18439',
                            'device-driver-1-spare');
   perform tst.eq(r ->> 'outcome', 'DEVICE_NOT_APPROVED',
                  'an unapproved device cannot complete a movement');
@@ -68,12 +68,12 @@ end $$;
 -- ============================== HAPPY PATH =================================
 do $$
 declare
-  v1 uuid := tst.assignment_id('MAT752389T7R19810');
-  v2 uuid := tst.assignment_id('MAT464844TSR09249');
+  v1 uuid := tst.assignment_id('MAT752389T7R20588');
+  v2 uuid := tst.assignment_id('MAT464844TSR09113');
   r  jsonb;
 begin
   -- Vehicle 1 of 2.
-  r := tst.scan_and_verify(v1, 'CULVNSA2601795', 'MAT752389T7R19810',
+  r := tst.scan_and_verify(v1, 'TRHU8755445', 'MAT752389T7R20588',
                            'device-driver-1', null, 'MATCH');
   perform tst.eq(r ->> 'outcome', 'MATCH', 'correct container + correct chassis verifies');
   perform tst.eq(r ->> 'status', 'COMPLETED', 'the movement is completed');
@@ -83,13 +83,13 @@ begin
                  'the assignment is marked completed');
 
   -- Vehicle 2 of 2.
-  r := tst.scan_and_verify(v2, 'CULVNSA2601795', 'MAT464844TSR09249',
+  r := tst.scan_and_verify(v2, 'TRHU8755445', 'MAT464844TSR09113',
                            'device-driver-1', null, 'MATCH');
   perform tst.eq(r ->> 'outcome', 'MATCH', 'the second vehicle verifies');
   perform tst.eq(r ->> 'container_filled', '2', 'container shows 2 of 2');
 
   perform tst.ok((select is_complete from v_container_progress
-                   where container_no = 'CULVNSA2601795'),
+                   where container_no = 'TRHU8755445'),
                  'the container reports complete');
 
   -- The device agreed with the server on both. Disagreement is a signal, so it
@@ -100,7 +100,7 @@ begin
                  'client and server verdicts agreed and both were stored');
 
   ------------------------------------------------------------ already completed
-  r := tst.scan_and_verify(v1, 'CULVNSA2601795', 'MAT752389T7R19810');
+  r := tst.scan_and_verify(v1, 'TRHU8755445', 'MAT752389T7R20588');
   perform tst.eq(r ->> 'outcome', 'ALREADY_COMPLETED',
                  'a completed assignment cannot be completed twice');
   perform tst.eq((select count(*)::int from movement_events
@@ -111,17 +111,17 @@ end $$;
 -- ============================ IDEMPOTENCY ==================================
 do $$
 declare
-  a  uuid := tst.assignment_id('MAT111222A1B00001');
+  a  uuid := tst.assignment_id('MAT752389T7R18439');
   mv uuid := gen_random_uuid();
   r1 jsonb; r2 jsonb;
 begin
-  r1 := tst.scan_and_verify(a, 'CULVNSA2601796', 'MAT111222A1B00001',
+  r1 := tst.scan_and_verify(a, 'CAIU4330430', 'MAT752389T7R18439',
                             'device-driver-1', mv);
   perform tst.eq(r1 ->> 'outcome', 'MATCH', 'first submission verifies');
 
   -- A double tap, a retry after a timeout, or an outbox replay: same movement
   -- id, same values. Must return the original result and change nothing.
-  r2 := tst.scan_and_verify(a, 'CULVNSA2601796', 'MAT111222A1B00001',
+  r2 := tst.scan_and_verify(a, 'CAIU4330430', 'MAT752389T7R18439',
                             'device-driver-1', mv);
   perform tst.eq(r2 ->> 'replayed', 'true', 'the replay is recognised');
   perform tst.eq(r2 ->> 'movement_id', r1 ->> 'movement_id', 'the same movement is returned');
@@ -130,13 +130,13 @@ begin
 
   -- The same id with DIFFERENT scanned values is not a retry. It is either a
   -- bug or an attack, and it must not overwrite the original.
-  r2 := tst.scan_and_verify(a, 'CULVNSA2601795', 'MAT752389T7R19810',
+  r2 := tst.scan_and_verify(a, 'TRHU8755445', 'MAT752389T7R20588',
                             'device-driver-1', mv);
   perform tst.eq(r2 ->> 'outcome', 'REPLAY_CONFLICT',
                  'a movement id resubmitted with different values is refused');
   perform tst.eq(r2 ->> 'status', 'BLOCKED', 'the conflicting replay is blocked');
   perform tst.eq((select scanned_chassis_no from movement_events where id = mv),
-                 'MAT111222A1B00001',
+                 'MAT752389T7R18439',
                  'the originally recorded values are untouched');
   perform tst.ok((select count(*) > 0 from exceptions
                    where type = 'SYNC_ISSUE' and severity = 1),
@@ -150,16 +150,16 @@ select tst.logout();
 reset role;
 -- A manifest may legitimately state a capacity lower than the number of rows
 -- (a container downgraded after allocation). Simulate that directly.
-update containers set expected_vehicle_count = 1 where container_no = 'CULVNSA2601796';
+update containers set expected_vehicle_count = 1 where container_no = 'CAIU4330430';
 
 set role authenticated;
 select tst.login('00000000-0000-0000-0000-0000000000c3');
 do $$
 declare
-  a2 uuid := tst.assignment_id('MAT111222A1B00002');
+  a2 uuid := tst.assignment_id('MAT464844TSR09257');
   r  jsonb;
 begin
-  r := tst.scan_and_verify(a2, 'CULVNSA2601796', 'MAT111222A1B00002');
+  r := tst.scan_and_verify(a2, 'CAIU4330430', 'MAT464844TSR09257');
   perform tst.eq(r ->> 'outcome', 'CONTAINER_FULL',
                  'a container at capacity refuses another vehicle');
   perform tst.eq(r -> 'detail' ->> 'capacity', '1', 'the response reports the capacity');
@@ -174,7 +174,7 @@ begin
   -- refuses it on yard scope regardless.
   perform tst.throws(
     'select tst.scan_and_verify((select id from vehicle_assignments limit 1), '
-    '''CULVNSA2601795'', ''MAT752389T7R19810'', ''device-driver-2'')',
+    '''TRHU8755445'', ''MAT752389T7R20588'', ''device-driver-2'')',
     'a driver from another yard cannot verify a movement there');
 end $$;
 
@@ -183,7 +183,7 @@ do $$
 begin
   perform tst.throws(
     'select verify_movement(gen_random_uuid(), (select id from vehicle_assignments limit 1), '
-    '''CULVNSA2601795'', ''MAT752389T7R19810'')',
+    '''TRHU8755445'', ''MAT752389T7R20588'')',
     'a manager cannot complete a movement — only a DRIVER can');
   perform tst.throws(
     'select claim_assignment((select id from vehicle_assignments limit 1))',
