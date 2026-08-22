@@ -239,3 +239,69 @@ begin
       where action = 'movement.verified' and entity_id = mv.id) = 1,
     'and exactly one audit row records it');
 end $$;
+
+-- ===========================================================================
+-- END-OF-SHIFT RECONCILIATION
+--
+-- The error no per-movement check can catch: a container sealed with one
+-- vehicle instead of two. Every individual scan passed.
+-- ===========================================================================
+set role authenticated;
+select tst.login('00000000-0000-0000-0000-0000000000c3');
+do $$
+declare
+  a uuid := tst.assignment_on(current_date + 100, 'MAT111333E1E00002');
+  r jsonb;
+begin
+  -- Deliberately leave CULVNSA2601799 with only one of its two vehicles.
+  perform tst.eq(
+    (select count(*)::int from movement_events me
+      join vehicle_assignments va on va.id = me.assignment_id
+      join containers c on c.id = va.container_id
+     where c.container_no = 'CULVNSA2601799'
+       and me.status in ('COMPLETED','OVERRIDDEN')),
+    1, 'precondition: one of two loaded');
+end $$;
+
+select tst.login('00000000-0000-0000-0000-0000000000c2');
+do $$
+declare r jsonb := shift_report('00000000-0000-0000-0000-0000000000b1', current_date + 100);
+       partial jsonb;
+begin
+  perform tst.ok(r is not null, 'the shift report returns');
+
+  select value into partial
+    from jsonb_array_elements(r -> 'partiallyLoaded')
+   where value ->> 'containerNo' = 'CULVNSA2601799';
+
+  perform tst.ok(partial is not null,
+                 'a half-loaded container is reported at shift close');
+  perform tst.eq((partial ->> 'expected')::int, 2, 'it says how many were expected');
+  perform tst.eq((partial ->> 'loaded')::int, 1, 'and how many are in it');
+  perform tst.ok(jsonb_array_length(partial -> 'missing') = 1,
+                 'and NAMES the vehicle that is missing');
+  perform tst.eq(partial -> 'missing' ->> 0, 'MAT111333E1E00002',
+                 'by chassis number, so someone can go and find it');
+
+  -- A full container must not appear.
+  perform tst.ok(
+    not exists (select 1 from jsonb_array_elements(r -> 'partiallyLoaded') c
+                 where c ->> 'containerNo' = 'CULVNSA2601795'),
+    'a complete container is not reported');
+
+  perform tst.ok(r ? 'openExceptions', 'it counts open exceptions');
+  perform tst.ok(r ? 'manualEntries', 'it counts manual entries');
+  perform tst.ok(r ? 'clockAnomalies', 'and clock anomalies');
+end $$;
+
+-- A driver cannot see the shift report: it is a supervisory view.
+select tst.login('00000000-0000-0000-0000-0000000000c3');
+do $$
+begin
+  perform tst.throws(
+    'select shift_report(''00000000-0000-0000-0000-0000000000b1'')',
+    'a driver cannot read the shift report');
+end $$;
+
+select tst.logout();
+reset role;

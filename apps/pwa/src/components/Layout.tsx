@@ -66,6 +66,7 @@ const MANAGER_NAV = [
   { to: '/manager/manifests', label: 'Manifests' },
   { to: '/manager/assignments', label: 'Assignments' },
   { to: '/manager/exceptions', label: 'Exceptions' },
+  { to: '/manager/shift-report', label: 'Shift close' },
   { to: '/manager/users', label: 'Users', adminOnly: true },
   { to: '/manager/audit', label: 'Audit log' },
 ]

@@ -14,6 +14,7 @@ import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
   YardBoard, MovementEvidence, EvidenceAttempt, AuditFilter, ManifestCorrection,
+  ShiftReport,
 } from '../types'
 import type { ConnectionState } from '@/lib/realtime'
 import { pickNextAssignment } from '../nextAssignment'
@@ -600,6 +601,12 @@ export class SupabaseDataSource implements DataSource {
       entityId: r.entity_id ?? undefined,
       detail: (r.after_value ?? undefined) as Record<string, unknown> | undefined,
     }))
+  }
+
+  async getShiftReport(yardId: string, date?: string): Promise<ShiftReport> {
+    return unwrap(await this.db.rpc('shift_report', {
+      p_yard_id: yardId, p_date: date ?? null,
+    })) as unknown as ShiftReport
   }
 
   async listCorrections(): Promise<ManifestCorrection[]> {

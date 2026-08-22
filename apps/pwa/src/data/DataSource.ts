@@ -15,6 +15,7 @@ import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
   YardBoard, MovementEvidence, EvidenceAttempt, AuditFilter, ManifestCorrection,
+  ShiftReport,
 } from './types'
 import type { ConnectionState } from '@/lib/realtime'
 
@@ -130,6 +131,8 @@ export interface DataSource {
   listUsers(): Promise<Profile[]>
   listAuditEntries(filter?: AuditFilter): Promise<AuditEntry[]>
   listCorrections(): Promise<ManifestCorrection[]>
+  /** End-of-shift reconciliation. The check no per-movement rule can make. */
+  getShiftReport(yardId: string, date?: string): Promise<ShiftReport>
   correctAssignment(input: {
     assignmentId: string
     field: 'chassis_no' | 'container_no' | 'sequence_no'

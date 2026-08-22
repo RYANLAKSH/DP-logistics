@@ -14,7 +14,7 @@ import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationOutcome,
   VerificationResult, Yard, YardBoard, MovementEvidence, EvidenceAttempt,
-  AuditFilter, ManifestCorrection,
+  AuditFilter, ManifestCorrection, ShiftReport,
 } from '../types'
 import type { ConnectionState } from '@/lib/realtime'
 import {
@@ -601,6 +601,31 @@ export class MockDataSource implements DataSource {
         || e.actorName.toLowerCase().includes(needle)
         || JSON.stringify(e.detail ?? {}).toLowerCase().includes(needle)
     })))
+  }
+
+  async getShiftReport(yardId: string, date?: string): Promise<ShiftReport> {
+    const byContainer = new Map<string, { expected: number; loaded: number; missing: string[] }>()
+    for (const a of this.assignments.filter((x) => x.yardId === yardId)) {
+      const e = byContainer.get(a.containerNo)
+        ?? { expected: a.expectedVehicleCount, loaded: 0, missing: [] }
+      if (a.status === 'COMPLETED') e.loaded += 1
+      else e.missing.push(a.chassisNo)
+      byContainer.set(a.containerNo, e)
+    }
+    return delay(snapshot({
+      yardId,
+      operatingDate: date ?? new Date().toISOString().slice(0, 10),
+      partiallyLoaded: [...byContainer.entries()]
+        .filter(([, v]) => v.loaded > 0 && v.loaded < v.expected)
+        .map(([containerNo, v]) => ({ containerNo, ...v })),
+      notStarted: [...byContainer.values()].filter((v) => v.loaded === 0).length,
+      openExceptions: this.exceptions.filter(
+        (x) => x.status === 'OPEN' || x.status === 'UNDER_REVIEW').length,
+      overrides: { count: 0, ratePercent: 0 },
+      clockAnomalies: 0,
+      manualEntries: 0,
+      completed: this.movements.length,
+    }))
   }
 
   async listCorrections(): Promise<ManifestCorrection[]> {

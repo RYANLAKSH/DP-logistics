@@ -54,6 +54,8 @@ const AuditLogPage = lazy(() => import('@/routes/manager/AuditLogPage')
   .then((m) => ({ default: m.AuditLogPage })))
 const MovementDetailPage = lazy(() => import('@/routes/manager/MovementDetailPage')
   .then((m) => ({ default: m.MovementDetailPage })))
+const ShiftReportPage = lazy(() => import('@/routes/manager/ShiftReportPage')
+  .then((m) => ({ default: m.ShiftReportPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,6 +115,7 @@ export function AppRoutes() {
           <Route path="/manager/exceptions" element={<ExceptionsPage />} />
           <Route path="/manager/audit" element={<AuditLogPage />} />
           <Route path="/manager/movements/:movementId" element={<MovementDetailPage />} />
+          <Route path="/manager/shift-report" element={<ShiftReportPage />} />
         </Route>
 
         {/* Admin-only. A MANAGER reaching these lands on /403. */}

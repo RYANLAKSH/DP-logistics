@@ -300,3 +300,23 @@ export interface ManifestCorrection {
   correctedByName?: string
   affectedMovementCount: number
 }
+
+export interface PartiallyLoadedContainer {
+  containerNo: string
+  bayPosition?: string | null
+  expected: number
+  loaded: number
+  missing: string[]
+}
+
+export interface ShiftReport {
+  yardId: string
+  operatingDate: string
+  partiallyLoaded: PartiallyLoadedContainer[]
+  notStarted: number
+  openExceptions: number
+  overrides?: { count: number; ratePercent: number } | null
+  clockAnomalies: number
+  manualEntries: number
+  completed: number
+}
