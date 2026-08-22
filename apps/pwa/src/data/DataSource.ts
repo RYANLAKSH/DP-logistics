@@ -14,7 +14,7 @@
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
-  YardBoard,
+  YardBoard, MovementEvidence, EvidenceAttempt,
 } from './types'
 import type { ConnectionState } from '@/lib/realtime'
 
@@ -117,6 +117,16 @@ export interface DataSource {
   approveOverride(
     exceptionId: string, reason: string, note: string,
   ): Promise<{ movementId: string }>
+  /** The full evidence record for one movement. Viewing it is audited. */
+  getMovementEvidence(movementId: string): Promise<MovementEvidence>
+  getExceptionEvidence(exceptionId: string): Promise<{ attempts: EvidenceAttempt[] }>
+  /**
+   * A short-lived URL for one stored image. Returns null when the backend has
+   * no object store — the viewer must then say so rather than show a broken
+   * image.
+   */
+  getEvidenceUrl(path: string): Promise<string | null>
+
   listUsers(): Promise<Profile[]>
   listAuditEntries(): Promise<AuditEntry[]>
 }

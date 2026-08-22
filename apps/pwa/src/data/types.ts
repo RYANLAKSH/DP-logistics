@@ -240,3 +240,42 @@ export interface YardBoard {
   activity: ActivityItem[]
   exceptionFeed: ActivityItem[]
 }
+
+export interface EvidenceAttempt {
+  id: string
+  kind: 'CONTAINER' | 'CHASSIS' | 'FINAL' | 'VEHICLE_REG'
+  result: string
+  outcome?: string
+  valueSource?: string
+  ocrTextRaw?: string
+  ocrConfidence?: number
+  ocrEngine?: string
+  scannedContainerNo?: string
+  scannedChassisNo?: string
+  imagePath?: string
+  imageSha256?: string
+  gps?: { lat: number; lng: number; accuracyM: number } | null
+  gpsDenied?: boolean
+  attemptedAtDevice?: string
+  receivedAt?: string
+  clockSkewSeconds?: number
+}
+
+export interface MovementEvidence {
+  movement: {
+    id: string
+    status: string
+    yardId: string
+    expectedContainerNo: string
+    expectedChassisNo: string
+    scannedContainerNo: string
+    scannedChassisNo: string
+    verifiedAt: string
+    completedAtDevice?: string
+    clockSkewSeconds?: number
+    gps?: { lat: number; lng: number; accuracyM: number } | null
+    driverName?: string
+    appVersion?: string
+  }
+  attempts: EvidenceAttempt[]
+}

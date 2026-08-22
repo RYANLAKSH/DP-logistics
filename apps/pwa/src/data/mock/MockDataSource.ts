@@ -13,7 +13,7 @@ import { pickNextAssignment } from '../nextAssignment'
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationOutcome,
-  VerificationResult, Yard, YardBoard,
+  VerificationResult, Yard, YardBoard, MovementEvidence, EvidenceAttempt,
 } from '../types'
 import type { ConnectionState } from '@/lib/realtime'
 import {
@@ -558,6 +558,31 @@ export class MockDataSource implements DataSource {
     found.resolutionNote = `${reason}: ${note}`
     found.resolvedAt = new Date().toISOString()
     return delay({ movementId: movement.id })
+  }
+
+  async getMovementEvidence(movementId: string): Promise<MovementEvidence> {
+    const m = this.movements.find((x) => x.id === movementId)
+    if (!m) throw new Error('movement not found')
+    return delay({
+      movement: {
+        id: m.id, status: m.status, yardId: m.yardId,
+        expectedContainerNo: m.containerNo, expectedChassisNo: m.chassisNo,
+        scannedContainerNo: m.containerNo, scannedChassisNo: m.chassisNo,
+        verifiedAt: m.verifiedAt, driverName: m.driverName,
+        clockSkewSeconds: 2, appVersion: 'mock',
+        gps: { lat: 18.9481, lng: 72.9214, accuracyM: 12 },
+      },
+      attempts: [],
+    })
+  }
+
+  async getExceptionEvidence(): Promise<{ attempts: EvidenceAttempt[] }> {
+    return delay({ attempts: [] })
+  }
+
+  /** No object store behind the mock. The viewer must say so, not show a gap. */
+  async getEvidenceUrl(): Promise<string | null> {
+    return delay(null)
   }
 
   async listUsers(): Promise<Profile[]> {

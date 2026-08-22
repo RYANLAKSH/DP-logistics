@@ -13,7 +13,7 @@ import type {
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
-  YardBoard,
+  YardBoard, MovementEvidence, EvidenceAttempt,
 } from '../types'
 import type { ConnectionState } from '@/lib/realtime'
 import { pickNextAssignment } from '../nextAssignment'
@@ -520,6 +520,35 @@ export class SupabaseDataSource implements DataSource {
       p_exception_id: exceptionId, p_reason: reason, p_note: note,
     })) as { movement_id: string }
     return { movementId: data.movement_id }
+  }
+
+  async getMovementEvidence(movementId: string): Promise<MovementEvidence> {
+    return unwrap(
+      await this.db.rpc('movement_evidence', { p_movement_id: movementId }),
+    ) as unknown as MovementEvidence
+  }
+
+  async getExceptionEvidence(
+    exceptionId: string,
+  ): Promise<{ attempts: EvidenceAttempt[] }> {
+    return unwrap(
+      await this.db.rpc('exception_evidence', { p_exception_id: exceptionId }),
+    ) as unknown as { attempts: EvidenceAttempt[] }
+  }
+
+  /**
+   * Five minutes, and no longer.
+   *
+   * Long-lived links leak: they end up in chat messages, browser history and
+   * screenshots, and a bucket URL that works for a week is effectively public
+   * to anyone who has ever been sent one.
+   */
+  async getEvidenceUrl(path: string): Promise<string | null> {
+    const { data, error } = await this.db.storage
+      .from('evidence')
+      .createSignedUrl(path, 300)
+    if (error) return null
+    return data?.signedUrl ?? null
   }
 
   async listUsers(): Promise<Profile[]> {

@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
 import { EmptyState } from '@/components/States'
 import { useScanDraft } from '@/lib/scanDraft'
+import { LocationNotice } from '@/components/LocationNotice'
 
 /**
  * The task screen — and the control that prevents the first risk in the brief.
@@ -118,6 +119,8 @@ export function PickupDetailPage() {
           <p className="text-center text-sm text-ink-600">
             You can scan them in either order.
           </p>
+
+          <LocationNotice />
 
           <ActionBar>
             <Link to={`/driver/pickup/${assignment.id}/result`} aria-disabled={!bothScanned}>

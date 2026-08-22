@@ -20,6 +20,7 @@ import { AssignmentsPage } from '@/routes/manager/AssignmentsPage'
 import { ExceptionsPage } from '@/routes/manager/ExceptionsPage'
 import { UsersPage } from '@/routes/manager/UsersPage'
 import { AuditLogPage } from '@/routes/manager/AuditLogPage'
+import { MovementDetailPage } from '@/routes/manager/MovementDetailPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +77,7 @@ export function AppRoutes() {
           <Route path="/manager/assignments" element={<AssignmentsPage />} />
           <Route path="/manager/exceptions" element={<ExceptionsPage />} />
           <Route path="/manager/audit" element={<AuditLogPage />} />
+          <Route path="/manager/movements/:movementId" element={<MovementDetailPage />} />
         </Route>
 
         {/* Admin-only. A MANAGER reaching these lands on /403. */}

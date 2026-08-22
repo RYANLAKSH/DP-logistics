@@ -8,6 +8,7 @@ import { EmptyState, Spinner } from '@/components/States'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
 import { relativeTime } from '@/lib/format'
+import { EvidenceAttemptCard } from '@/components/Evidence'
 import type { ExceptionRecord } from '@/data/types'
 
 const RESOLUTIONS = [
@@ -218,11 +219,7 @@ function ResolvePanel({
         <button onClick={onClose} aria-label="Close" className="text-xl text-ink-600">×</button>
       </div>
 
-      {/* Phase 11 renders the captured evidence here. */}
-      <div className="mb-4 flex h-32 items-center justify-center rounded-lg border
-                      border-dashed border-line/40 bg-paper text-sm text-ink-600">
-        Evidence images — phase 11
-      </div>
+      <ExceptionEvidence exceptionId={record.id} />
 
       {done ? (
         <div className="rounded-lg bg-ok-100 px-3 py-3 text-sm">
@@ -335,5 +332,45 @@ function ResolvePanel({
         </form>
       )}
     </Card>
+  )
+}
+
+
+/**
+ * The photographs behind an exception.
+ *
+ * Fetched only when a manager opens the panel, and every fetch is audited
+ * server-side. Loading evidence for a whole queue would log a hundred views
+ * nobody made, which would make the access log useless as chain of custody.
+ */
+function ExceptionEvidence({ exceptionId }: { exceptionId: string }) {
+  const data = useData()
+  const { data: evidence, isLoading, isError } = useQuery({
+    queryKey: ['exception-evidence', exceptionId],
+    queryFn: () => data.getExceptionEvidence(exceptionId),
+  })
+
+  if (isLoading) return <Spinner label="Loading the evidence" />
+  if (isError) {
+    return (
+      <p className="mb-4 rounded-lg bg-warn-100 px-3 py-2 text-sm text-warn-500">
+        The evidence could not be loaded.
+      </p>
+    )
+  }
+  if (!evidence?.attempts.length) {
+    return (
+      <p className="mb-4 rounded-lg border border-dashed border-line/40 bg-paper px-3
+                    py-4 text-center text-sm text-ink-600">
+        No photographs are attached to this exception.
+      </p>
+    )
+  }
+  return (
+    <div className="mb-4 space-y-3">
+      {evidence.attempts.map((a) => (
+        <EvidenceAttemptCard key={a.id} attempt={a} />
+      ))}
+    </div>
   )
 }
