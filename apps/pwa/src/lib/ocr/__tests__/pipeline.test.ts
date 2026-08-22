@@ -109,6 +109,59 @@ describe('runScan', () => {
   })
 })
 
+/**
+ * A real Tata Motors despatch label, as photographed in the yard. The chassis
+ * number is one string among six, it is NOT the most confident read, and the
+ * TYPE code is a substring of it. Every one of those facts breaks a pipeline
+ * that trusts the top line.
+ */
+describe('runScan on a real despatch label', () => {
+  const LABEL = [
+    { text: 'TYPE: 464844', confidence: 0.97 },
+    { text: 'ASN: 30495315', confidence: 0.95 },
+    { text: '267515100104', confidence: 0.94 },
+    { text: 'MAT464844TSR10851', confidence: 0.88 },
+    { text: 'EVR: 4SPTC1234567', confidence: 0.86 },
+  ]
+  const LABEL_CHASSIS = 'MAT464844TSR10851'
+
+  it('picks the chassis number out of the surrounding clutter', async () => {
+    const p = new MockOcrProvider().willReadFrame(LABEL)
+    const r = await runScan(p, canvas, {
+      kind: 'chassis', expected: LABEL_CHASSIS, others: [CHASSIS],
+    })
+    expect(r.accepted).toBe(true)
+    expect(r.proposal).toBe(LABEL_CHASSIS)
+    expect(r.candidateCount).toBe(5)
+    // The winning candidate's own raw text, not the loudest line on the label.
+    expect(r.rawText).toBe(LABEL_CHASSIS)
+  })
+
+  it('does not accept the TYPE code just because it is a substring', async () => {
+    // Only the type code is legible. It is a prefix-adjacent fragment of the
+    // expected chassis number, which is exactly the read that must NOT pass.
+    const p = new MockOcrProvider().willReadFrame([LABEL[0]!, LABEL[1]!])
+    const r = await runScan(p, canvas, {
+      kind: 'chassis', expected: LABEL_CHASSIS, others: [CHASSIS],
+    })
+    expect(r.accepted).toBe(false)
+    expect(r.proposal).not.toBe(LABEL_CHASSIS)
+  })
+
+  it('still refuses the label when it belongs to another container\'s vehicle', async () => {
+    // The driver photographs the right kind of label on the wrong vehicle.
+    // Reading every candidate must not turn that into a match.
+    const p = new MockOcrProvider().willReadFrame([
+      { text: 'TYPE: 752389', confidence: 0.97 },
+      { text: OTHER_CHASSIS, confidence: 0.93 },
+    ])
+    const r = await runScan(p, canvas, {
+      kind: 'chassis', expected: CHASSIS, others: [OTHER_CHASSIS],
+    })
+    expect(r.accepted).toBe(false)
+  })
+})
+
 describe('sourceFor', () => {
   it('distinguishes how each value reached the record', async () => {
     const clean = await runScan(

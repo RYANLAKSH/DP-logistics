@@ -12,11 +12,21 @@ import { normalize } from './normalize'
 export class MockOcrProvider implements OcrProvider {
   readonly name = 'mock'
 
-  private queue: Array<{ text: string; confidence: number }> = []
+  private queue: Array<Array<{ text: string; confidence: number }>> = []
 
   /** Queue what the next recognise call should "read". */
   willRead(text: string, confidence = 0.95): this {
-    this.queue.push({ text, confidence })
+    this.queue.push([{ text, confidence }])
+    return this
+  }
+
+  /**
+   * Queue a whole frame: several strings read from one photo. Real despatch
+   * labels are never one line, so a provider that can only return one is not
+   * exercising the case the pipeline exists to handle.
+   */
+  willReadFrame(lines: Array<{ text: string; confidence: number }>): this {
+    this.queue.push(lines)
     return this
   }
 
@@ -25,13 +35,15 @@ export class MockOcrProvider implements OcrProvider {
   async recognize(_image: unknown, kind: ScanKind): Promise<OcrResult> {
     void kind
     const next = this.queue.shift()
-    if (!next) return { candidates: [], engine: this.name, durationMs: 0 }
+    if (!next || next.length === 0) {
+      return { candidates: [], engine: this.name, durationMs: 0 }
+    }
     return {
-      candidates: [{
-        raw: next.text,
-        normalized: normalize(next.text),
-        confidence: next.confidence,
-      }],
+      candidates: next.map((line) => ({
+        raw: line.text,
+        normalized: normalize(line.text),
+        confidence: line.confidence,
+      })),
       engine: this.name,
       durationMs: 1,
     }

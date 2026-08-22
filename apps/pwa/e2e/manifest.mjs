@@ -44,6 +44,12 @@ await page.screenshot({ path: `${OUT}/20-preview-clean.png`, fullPage: true })
 const broken = await upload('manifest-broken.csv')
 await page.screenshot({ path: `${OUT}/21-preview-broken.png`, fullPage: true })
 
+// --- the customer's real pickup list, transcribed verbatim ------------------
+// Container written once per pair, second vehicle's cell blank, a spacer row
+// in the middle, and "SR" running 1..6 rather than naming a slot.
+const real = await upload('manifest-real.csv')
+await page.screenshot({ path: `${OUT}/22-preview-real.png`, fullPage: true })
+
 await browser.close()
 
 const report = {
@@ -55,6 +61,9 @@ const report = {
   reportsDuplicateChassis: broken.body.includes('already assigned to'),
   reportsCheckDigit: broken.body.includes('check digit'),
   reportsBadSequence: broken.body.includes('whole number between 1 and 6'),
+  realFileAccepted: real.publishDisabled === false,
+  realFileCarriesContainerForward: (real.body.match(/TGCU5033177/g) ?? []).length >= 2,
+  realFileShowsWhatItInherited: real.body.includes('from row above'),
   errors,
 }
 console.log(JSON.stringify(report, null, 2))

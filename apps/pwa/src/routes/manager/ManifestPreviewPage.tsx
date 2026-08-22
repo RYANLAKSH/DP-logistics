@@ -96,7 +96,8 @@ export function ManifestPreviewPage() {
               </p>
               <p className="mt-1 text-sm text-ink-700">
                 These do not block publishing. Check them anyway — an unusual vehicle
-                count is often a missing line rather than a genuine exception.
+                count is often a missing line rather than a genuine exception, and an
+                inherited container is only right if the pairing on the sheet is.
               </p>
             </div>
           )}
@@ -109,6 +110,15 @@ export function ManifestPreviewPage() {
                   <Td className="code text-ink-600">{row.rowNo}</Td>
                   <Td className="code">
                     {row.containerNo || <em className="text-bad-500">missing</em>}
+                    {/* Real pickup lists write the container once per pair and
+                        leave the second vehicle's cell blank. Inheriting it is
+                        what makes those files usable — showing that it was
+                        inherited is what keeps the manager in charge of it. */}
+                    {row.containerInherited && (
+                      <span className="ml-2 whitespace-nowrap rounded-full bg-warn-100 px-2 py-0.5 text-[11px] font-semibold text-warn-500">
+                        from row above
+                      </span>
+                    )}
                   </Td>
                   <Td className="code">
                     {row.chassisNo || <em className="text-bad-500">missing</em>}

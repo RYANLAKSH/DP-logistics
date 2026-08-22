@@ -92,6 +92,39 @@ ISO 3779 VIN.
 
 **This is the top technical risk in the project.** Plan for it rather than discovering it.
 
+### 4a. What the real labels turned out to be
+
+This section was written before anyone had seen a vehicle. Photographs from the yard
+changed two of its assumptions, and the second one changed the code.
+
+**Better than assumed:** the number is not read off stamped metal at all. Tata Motors
+applies a printed despatch label — clean black-on-white, machine-set type, flat and
+square to the camera. That is a far easier read than a stamped chassis plate, and it
+lowers the risk this section opens with.
+
+**Worse than assumed:** the label is not one number. Each carries six or more codes —
+`TYPE`, `ASN`, a part number, an engine number, `EVR`, and the chassis number itself —
+and the chassis number is neither the largest nor reliably the most confidently read.
+Worst of all, `TYPE` is a *substring* of the chassis number:
+
+```
+chassis   MAT464844TSR10851
+TYPE            464844
+```
+
+A pipeline that takes the engine's top-confidence line picks the wrong code routinely,
+and a partial read of `TYPE` looks like a partial read of the right field. So the
+pipeline scores **every** candidate the frame produced against the manifest and takes
+the best match, rather than trusting the loudest line. The clutter becomes irrelevant
+instead of dangerous. Nothing is relaxed to achieve it: each candidate still has to
+clear the confidence floor, the check digit and the margin rule on its own.
+
+The labels also carry a Code 128 barcode of the chassis number. Reading it is
+deliberately **not** implemented — the operator's instruction is to read the chassis
+number off the label, and a barcode path is a second source of truth to keep correct,
+audit and explain for no gain the label itself does not already give. The `value_source`
+enum has room for it if that ever changes.
+
 ```
 frame → ROI crop → grayscale → CLAHE (local contrast; stamped metal has almost none)
       → threshold → deskew

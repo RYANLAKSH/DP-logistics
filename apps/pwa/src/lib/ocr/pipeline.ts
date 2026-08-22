@@ -21,6 +21,8 @@ import {
  */
 
 export interface ScanOutcome {
+  /** How many candidates the frame produced. A despatch label yields many. */
+  candidateCount: number
   /** Exactly what the engine produced. Always populated when it produced anything. */
   rawText: string | null
   /** The engine's own confidence for the winning candidate, 0..1. */
@@ -50,6 +52,7 @@ export interface ScanRequest {
 }
 
 const FAILED: Omit<ScanOutcome, 'engine' | 'durationMs'> = {
+  candidateCount: 0,
   rawText: null,
   confidence: 0,
   proposal: null,
@@ -60,6 +63,21 @@ const FAILED: Omit<ScanOutcome, 'engine' | 'durationMs'> = {
   decision: null,
 }
 
+/**
+ * Evaluates EVERY candidate the frame produced, not just the most confident.
+ *
+ * This is the change the real labels forced. A Tata despatch label carries the
+ * chassis number alongside a type code, an ASN, a part number, an engine
+ * number and an EVR — six or more strings, any of which OCR may return with
+ * high confidence. Picking the top-confidence line alone would pick the wrong
+ * code routinely. Worse, the type code is a SUBSTRING of the chassis number
+ * (MAT_464844_TSR10851), so a partial read of the wrong field looks plausible.
+ *
+ * Scoring every candidate against the manifest and taking the best match makes
+ * the surrounding clutter irrelevant instead of dangerous. It does not weaken
+ * anything: a candidate still has to clear the confidence floor, the check
+ * digit and the margin rule on its own merits before it can be proposed.
+ */
 export async function runScan(
   provider: OcrProvider,
   image: HTMLCanvasElement | Blob | ImageBitmap,
@@ -70,10 +88,40 @@ export async function runScan(
 
   if (result.candidates.length === 0) return { ...FAILED, ...base }
 
-  const top = result.candidates[0]!
-  const minConfidence = request.minConfidence ?? (request.kind === 'container' ? 0.7 : 0.85)
+  const evaluated = result.candidates
+    .map((candidate) => evaluate(candidate, request))
+    .sort(rank)
 
-  let value = top.normalized
+  const best = evaluated[0]!
+  return { ...best.outcome, ...base, candidateCount: result.candidates.length }
+}
+
+interface Evaluated {
+  outcome: Omit<ScanOutcome, 'engine' | 'durationMs'>
+  score: number
+  confidence: number
+}
+
+/**
+ * An accepted candidate always beats an unaccepted one; among equals the
+ * better match wins, and engine confidence breaks the remaining ties. Ordering
+ * acceptance first is what stops a confident read of the ASN outranking a
+ * slightly less confident read of the chassis number itself.
+ */
+function rank(a: Evaluated, b: Evaluated): number {
+  if (a.outcome.accepted !== b.outcome.accepted) return a.outcome.accepted ? -1 : 1
+  if (a.score !== b.score) return b.score - a.score
+  return b.confidence - a.confidence
+}
+
+function evaluate(
+  candidate: { raw: string; normalized: string; confidence: number },
+  request: ScanRequest,
+): Evaluated {
+  const minConfidence = request.minConfidence
+    ?? (request.kind === 'container' ? 0.7 : 0.85)
+
+  let value = candidate.normalized
   let repaired = false
   let checkDigitFailed = false
 
@@ -95,35 +143,45 @@ export async function runScan(
     }
   }
 
+  const shell = {
+    candidateCount: 1,
+    rawText: candidate.raw,
+    confidence: candidate.confidence,
+  }
+
   // The check digit is arithmetic, not a probability. A container number that
   // fails it is not a low-confidence read of the right number — it is a
   // different number, and no confidence score should be allowed to argue.
   if (checkDigitFailed) {
     return {
-      ...base,
-      rawText: top.raw,
-      confidence: top.confidence,
-      proposal: value,
-      repaired: false,
-      accepted: false,
-      checkDigitFailed: true,
-      message:
-        'That container number fails its own check digit, so at least one character was misread. Retake it, or type it in.',
-      decision: null,
+      score: 0,
+      confidence: candidate.confidence,
+      outcome: {
+        ...shell,
+        proposal: value,
+        repaired: false,
+        accepted: false,
+        checkDigitFailed: true,
+        message:
+          'That container number fails its own check digit, so at least one character was misread. Retake it, or type it in.',
+        decision: null,
+      },
     }
   }
 
-  if (top.confidence < minConfidence) {
+  if (candidate.confidence < minConfidence) {
     return {
-      ...base,
-      rawText: top.raw,
-      confidence: top.confidence,
-      proposal: null,
-      repaired,
-      accepted: false,
-      checkDigitFailed: false,
-      message: 'That read was too unclear to trust. Retake the photo, or type it in.',
-      decision: null,
+      score: 0,
+      confidence: candidate.confidence,
+      outcome: {
+        ...shell,
+        proposal: null,
+        repaired,
+        accepted: false,
+        checkDigitFailed: false,
+        message: 'That read was too unclear to trust. Retake the photo, or type it in.',
+        decision: null,
+      },
     }
   }
 
@@ -134,20 +192,24 @@ export async function runScan(
   })
 
   return {
-    ...base,
-    rawText: top.raw,
-    confidence: top.confidence,
-    proposal: decision.proposal ?? (decision.accept ? value : null),
-    repaired,
-    accepted: decision.accept,
-    checkDigitFailed: false,
-    message: decision.reason,
-    decision,
+    score: decision.best?.score ?? 0,
+    confidence: candidate.confidence,
+    outcome: {
+      ...shell,
+      proposal: decision.proposal ?? (decision.accept ? value : null),
+      repaired,
+      accepted: decision.accept,
+      checkDigitFailed: false,
+      message: decision.reason,
+      decision,
+    },
   }
 }
 
 /** How the value reached the record. Carried through to the audit trail. */
-export function sourceFor(outcome: ScanOutcome, typed: boolean): 'OCR_AUTO' | 'OCR_CONFIRMED' | 'MANUAL_ENTRY' {
+export function sourceFor(
+  outcome: ScanOutcome, typed: boolean,
+): 'OCR_AUTO' | 'OCR_CONFIRMED' | 'MANUAL_ENTRY' {
   if (typed) return 'MANUAL_ENTRY'
   return outcome.accepted && !outcome.repaired ? 'OCR_AUTO' : 'OCR_CONFIRMED'
 }

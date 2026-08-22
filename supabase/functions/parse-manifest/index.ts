@@ -151,6 +151,7 @@ Deno.serve(async (req) => {
     validCount: result.validCount,
     rejectedCount: result.rejectedCount,
     errorSummary: result.errorSummary,
+    warningSummary: result.warningSummary,
     rows: result.rows,
   })
 })

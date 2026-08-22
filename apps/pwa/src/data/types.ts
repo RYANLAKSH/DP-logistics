@@ -201,6 +201,10 @@ export interface ParsedManifestRow {
   containerNo: string
   chassisNo: string
   sequenceNo: number | null
+  /** Set when the container came from the row above, not from this row. */
+  containerInherited?: boolean
+  invoiceNo?: string
+  sealNo?: string
   errors: string[]
   warnings: string[]
 }

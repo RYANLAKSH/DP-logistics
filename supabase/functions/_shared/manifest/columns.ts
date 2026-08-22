@@ -15,6 +15,8 @@ export type FieldName =
   | 'colour'
   | 'bayPosition'
   | 'operatingDate'
+  | 'invoiceNo'
+  | 'sealNo'
 
 export type ColumnMap = Partial<Record<FieldName, number>>
 
@@ -27,7 +29,12 @@ const SYNONYMS: Record<FieldName, string[]> = {
     'chassisno', 'chassisnumber', 'chassis', 'vin', 'vinno', 'framenumber',
     'frameno', 'vehiclechassisno', 'chassisnovin',
   ],
-  sequenceNo: ['sequence', 'seq', 'sequenceno', 'slot', 'slotno', 'position', 'sr', 'srno'],
+  // Deliberately NOT 'sr'/'srno'. On every real list seen so far, "SR" is a
+  // running serial down the whole sheet (1..40), not the slot within a
+  // container (1..2). Mapping it here rejected every row past the sixth for
+  // SEQUENCE_INVALID. Slot order is inferred from row order instead, which
+  // gives the same answer when SR really is ascending anyway.
+  sequenceNo: ['sequence', 'seq', 'sequenceno', 'slot', 'slotno', 'position'],
   vehicleRegNo: [
     'registration', 'regno', 'registrationno', 'vehicleno', 'vehiclenumber', 'plate',
   ],
@@ -35,6 +42,11 @@ const SYNONYMS: Record<FieldName, string[]> = {
   colour: ['colour', 'color'],
   bayPosition: ['bay', 'bayposition', 'location', 'position2', 'yardposition'],
   operatingDate: ['date', 'operatingdate', 'loadingdate', 'movementdate'],
+  invoiceNo: ['invoiceno', 'invoice', 'invno', 'billno'],
+  // The seal is applied after both vehicles are loaded, so it identifies the
+  // container's closure, not a vehicle. Captured for the shift report and for
+  // reconciliation with the shipping line; never used for matching.
+  sealNo: ['seal', 'sealno', 'sealnumber'],
 }
 
 function normalizeHeader(raw: string): string {

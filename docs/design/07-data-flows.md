@@ -50,6 +50,58 @@ and refuses one whose `parsed_rows` it has not itself produced. There is no code
 uploads and commits in one call, because the day someone adds one for convenience is the
 day a malformed file blocks every truck at the gate.
 
+### 1a. What the real pickup list looks like
+
+The parser was written against an assumed shape — one row per vehicle, container number on
+every row, a sequence column. The customer's actual list is none of those things:
+
+```
+      A     B                   C                 D             E            F
+ 1    TATA MOTORS CULVNSA2601795 20x40
+ 2    SR    CHASSIS NO           MODEL             INVOICE NO    CONT NO      SEAL
+ 3    1     MAT752389T7R20507    T.7 ULTRA …       MH2730495315  TGCU5033177  11866
+ 4    2     MAT464844TSR09249    …YODHA …          MH2730502737
+ 5    3     MAT752389T7R18439    T.7 ULTRA …       MH2730495315  CAIU7456843  13046
+ 6    4     MAT464844TSR09184    …YODHA …          MH2730502737
+```
+
+Four things in that block break naive parsing, and each has a named answer in the code:
+
+| What the file does | What it breaks | Answer |
+|---|---|---|
+| Title on row 1, header on row 2 | Assuming row 0 is the header | `findHeaderRow` scans the first ten rows for a usable mapping |
+| Chassis in column B, container in column E, plus `INVOICE NO` and `SEAL` | Positional parsing | Headers matched by synonym, never by position |
+| **Container written once per pair**; the second vehicle's cell is blank | Every second row rejected as `CONTAINER_MISSING` | Container carry-forward, below |
+| `SR` runs 1..40 down the sheet | Read as a slot, every row past the sixth is `SEQUENCE_INVALID` | `SR` is deliberately not a `sequenceNo` synonym; slot comes from row order within the container |
+
+**Container carry-forward** is the one inference this parser makes, and it is the reason the
+real file is usable at all — without it, half of every manifest is rejected. It is bounded
+and disclosed rather than open-ended:
+
+- A blank container cell inherits from the row above **only** while that container is still
+  below its expected vehicle count. A third blank row is still `CONTAINER_MISSING`, because
+  nobody assigned that vehicle anywhere.
+- A container written out again on the next row counts as a second vehicle rather than
+  restarting the count, so a file that repeats the number on every row never inherits into
+  a row that genuinely has none.
+- Every inherited row carries a `CONTAINER_INHERITED` warning naming the container and the
+  row it came from, and the preview marks it *from row above* beside the number. A manager
+  approves the manifest before a driver can see it, so the inference is reviewed by a human
+  every time — which is the difference between an inference and a guess.
+- Inheriting is not a way past validation: an inherited number goes through the same
+  character and ISO 6346 check-digit rules as a written one.
+
+**`CULVNSA2601795` is the booking reference, not a container.** It appears in the sheet
+title; the real containers are ISO 6346 numbers in column E. The system accepts both
+shapes, applying the check digit only to identifiers that are ISO-shaped, because operators
+do route their own references through the same column.
+
+**One number in the customer's own file fails its check digit** — `BMOU6433014`, where
+`BMOU6433015` is the valid form. Twenty of the twenty-one are clean. That row is rejected
+at upload rather than warned about, and the error names the digit that would make it valid.
+Rejecting costs one correction before publishing; accepting it costs a driver standing at a
+container whose real number will never match the manifest, with a manager on the phone.
+
 ## 2. Movement verification — the critical path
 
 ```

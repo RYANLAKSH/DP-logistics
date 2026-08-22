@@ -428,7 +428,9 @@ export class SupabaseDataSource implements DataSource {
       rowCount: number; validCount: number; rejectedCount: number
       rows: Array<{
         row_no: number; container_no: string; chassis_no: string
-        sequence_no: number | null; errors: string[]; warnings: string[]
+        sequence_no: number | null; container_inherited?: boolean
+        invoice_no?: string; seal_no?: string
+        errors: string[]; warnings: string[]
       }>
     }
 
@@ -445,6 +447,9 @@ export class SupabaseDataSource implements DataSource {
         containerNo: r.container_no,
         chassisNo: r.chassis_no,
         sequenceNo: r.sequence_no,
+        containerInherited: r.container_inherited,
+        invoiceNo: r.invoice_no,
+        sealNo: r.seal_no,
         errors: r.errors,
         warnings: r.warnings,
       })),
@@ -768,6 +773,9 @@ function toManifestImport(r: ImportRow): ManifestImport {
         containerNo: String(row.container_no ?? ''),
         chassisNo: String(row.chassis_no ?? ''),
         sequenceNo: row.sequence_no == null ? null : Number(row.sequence_no),
+        containerInherited: row.container_inherited === true,
+        invoiceNo: row.invoice_no == null ? undefined : String(row.invoice_no),
+        sealNo: row.seal_no == null ? undefined : String(row.seal_no),
         errors: (row.errors as string[]) ?? [],
         warnings: (row.warnings as string[]) ?? [],
       }

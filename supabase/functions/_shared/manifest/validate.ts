@@ -4,8 +4,15 @@
  * Rows are REJECTED, never guessed at. A row the system silently "corrects" is
  * a vehicle sent somewhere nobody chose, and the correction is invisible in
  * the audit trail because no human ever saw it.
+ *
+ * Container carry-forward (below) is the one inference this module makes, and
+ * it is not silent: every inherited row carries a CONTAINER_INHERITED warning
+ * into the preview, and a manager approves the manifest before any driver can
+ * see it. See the comment on `carryForwardContainer`.
  */
-import { isBlank, isIso6346Shaped, isValidContainerNo, normalizeCode } from './normalize.ts'
+import {
+  containerCheckDigit, isBlank, isIso6346Shaped, isValidContainerNo, normalizeCode,
+} from './normalize.ts'
 import type { ColumnMap } from './columns.ts'
 
 export interface ParsedRow {
@@ -17,6 +24,10 @@ export interface ParsedRow {
   make_model?: string
   colour?: string
   bay_position?: string
+  invoice_no?: string
+  seal_no?: string
+  /** True when the container number came from the row above, not this row. */
+  container_inherited?: boolean
   errors: string[]
   warnings: string[]
 }
@@ -28,6 +39,8 @@ export interface ValidationResult {
   rejectedCount: number
   /** Counts per error code, for the preview summary. */
   errorSummary: Record<string, number>
+  /** Counts per warning code. Inherited containers show up here. */
+  warningSummary: Record<string, number>
 }
 
 export interface ValidateOptions {
@@ -35,6 +48,22 @@ export interface ValidateOptions {
   expectedVehiclesPerContainer?: number
   /** When set, a row carrying a different date is rejected. */
   operatingDate?: string
+  /**
+   * Whether a blank container cell inherits the container from the row above.
+   *
+   * The real pickup lists write the container number once per container and
+   * leave it blank on the second vehicle:
+   *
+   *     SR  CHASSIS NO          MODEL      INVOICE NO    CONT NO      SEAL
+   *     1   MAT752389T7R20507   T.7 ULTRA  MH2730495315  TGCU5033177  11866
+   *     2   MAT464844TSR09249   YODHA      MH2730502737
+   *
+   * Without this, half of every real file is rejected as CONTAINER_MISSING and
+   * the product is unusable on day one. It is bounded rather than open-ended:
+   * a container only absorbs rows up to its expected vehicle count, so a third
+   * blank row is still an error rather than a third vehicle nobody assigned.
+   */
+  carryForwardContainer?: boolean
 }
 
 const CHASSIS_PATTERN = /^[A-Z0-9]{5,25}$/
@@ -46,7 +75,14 @@ export function validateRows(
   options: ValidateOptions = {},
 ): ValidationResult {
   const expectedPerContainer = options.expectedVehiclesPerContainer ?? 2
+  const carryForward = options.carryForwardContainer ?? true
   const rows: ParsedRow[] = []
+
+  // The container most recently declared by a row, and how many rows have been
+  // attributed to it so far (including the one that declared it).
+  let openContainer: string | null = null
+  let openContainerRowNo = 0
+  let openContainerCount = 0
 
   const cell = (r: string[], index: number | undefined): string =>
     index === undefined ? '' : (r[index] ?? '').trim()
@@ -68,11 +104,45 @@ export function validateRows(
     // administrators to ignore the error list.
     if (r.every((c) => isBlank(c))) return
 
-    const containerNo = normalizeCode(containerRaw)
+    let containerNo = normalizeCode(containerRaw)
     const chassisNo = normalizeCode(chassisRaw)
+    let inherited = false
 
-    if (isBlank(containerRaw)) {
-      errors.push('CONTAINER_MISSING: container number is missing')
+    // Carry-forward runs before validation so an inherited number is checked
+    // exactly as strictly as a written one.
+    if (isBlank(containerRaw) && carryForward && !isBlank(chassisRaw)) {
+      if (openContainer && openContainerCount < expectedPerContainer) {
+        containerNo = openContainer
+        inherited = true
+        openContainerCount += 1
+        warnings.push(
+          `CONTAINER_INHERITED: no container on this row, taken from ${openContainer} on row ${openContainerRowNo}`,
+        )
+      } else if (openContainer) {
+        errors.push(
+          `CONTAINER_MISSING: container number is missing, and ${openContainer} on row ${openContainerRowNo} already holds ${openContainerCount} vehicle${openContainerCount === 1 ? '' : 's'}`,
+        )
+      }
+    }
+
+    if (!isBlank(containerRaw)) {
+      if (containerNo === openContainer) {
+        // The same container written out again on the next line. Counting it
+        // as a second vehicle rather than restarting the count is what stops a
+        // file that repeats the number on every row from then inheriting into
+        // a blank row that genuinely has no container.
+        openContainerCount += 1
+      } else {
+        openContainer = containerNo
+        openContainerRowNo = rowNo
+        openContainerCount = 1
+      }
+    }
+
+    if (isBlank(containerRaw) && !inherited) {
+      if (!errors.some((e) => e.startsWith('CONTAINER_MISSING'))) {
+        errors.push('CONTAINER_MISSING: container number is missing')
+      }
     } else if (!CONTAINER_PATTERN.test(containerNo)) {
       errors.push(
         `CONTAINER_INVALID_CHARS: "${containerRaw}" contains characters that are not letters or digits, or is the wrong length`,
@@ -80,8 +150,21 @@ export function validateRows(
     } else if (isIso6346Shaped(containerNo) && !isValidContainerNo(containerNo)) {
       // Only checked when the identifier is ISO-shaped: many operators use
       // their own references, which carry no check digit at all.
+      //
+      // This stays a rejection, not a warning, and the customer's own list
+      // proves why: one number in it (BMOU6433014) fails here. A container
+      // number is typed into the spreadsheet by hand, and the driver will scan
+      // the real one off the physical box. A typo the upload lets through
+      // becomes a driver blocked at a container with a manager on the phone.
+      // Catching it at upload costs one correction; catching it in the yard
+      // costs a movement. Naming the digit that would make it valid turns the
+      // correction into a ten-second job.
+      const expected = containerCheckDigit(containerNo.slice(0, 10))
       errors.push(
-        `CONTAINER_CHECK_DIGIT: "${containerNo}" fails its ISO 6346 check digit`,
+        `CONTAINER_CHECK_DIGIT: "${containerNo}" fails its ISO 6346 check digit`
+        + (expected === null
+          ? ''
+          : ` — ${containerNo.slice(0, 10)}${expected} would be valid. Check it against the container itself.`),
       )
     }
 
@@ -130,6 +213,11 @@ export function validateRows(
       make_model: cell(r, map.makeModel) || undefined,
       colour: cell(r, map.colour) || undefined,
       bay_position: cell(r, map.bayPosition) || undefined,
+      invoice_no: cell(r, map.invoiceNo) || undefined,
+      // The seal belongs to the container, so an inherited row has none of its
+      // own. Reading it off the declaring row would invent a second seal.
+      seal_no: cell(r, map.sealNo) || undefined,
+      container_inherited: inherited || undefined,
       errors,
       warnings,
     })
@@ -208,12 +296,20 @@ export function validateRows(
   // container. Doing this AFTER validation means an explicitly wrong sequence
   // is still an error rather than being quietly overwritten.
   const nextSlot = new Map<string, number>()
+  // A file with no sequence column at all is the normal case, not an anomaly —
+  // none of the real pickup lists carry one. Warning on every row of every
+  // upload teaches managers to ignore the warning banner, which costs more
+  // than it buys. A blank cell in a file that DOES have the column is
+  // different: something was left out, and that is worth a second look.
+  const hasSequenceColumn = map.sequenceNo !== undefined
   for (const row of rows) {
     if (row.sequence_no == null && row.container_no && row.errors.length === 0) {
       const n = (nextSlot.get(row.container_no) ?? 0) + 1
       nextSlot.set(row.container_no, n)
       row.sequence_no = n
-      row.warnings.push(`SEQUENCE_INFERRED: no sequence given, assigned slot ${n}`)
+      if (hasSequenceColumn) {
+        row.warnings.push(`SEQUENCE_INFERRED: no sequence given, assigned slot ${n}`)
+      }
     } else if (row.sequence_no != null) {
       nextSlot.set(
         row.container_no,
@@ -223,10 +319,15 @@ export function validateRows(
   }
 
   const errorSummary: Record<string, number> = {}
+  const warningSummary: Record<string, number> = {}
   for (const row of rows) {
     for (const e of row.errors) {
       const code = e.split(':')[0]!
       errorSummary[code] = (errorSummary[code] ?? 0) + 1
+    }
+    for (const w of row.warnings) {
+      const code = w.split(':')[0]!
+      warningSummary[code] = (warningSummary[code] ?? 0) + 1
     }
   }
 
@@ -237,6 +338,7 @@ export function validateRows(
     validCount: rows.length - rejectedCount,
     rejectedCount,
     errorSummary,
+    warningSummary,
   }
 }
 

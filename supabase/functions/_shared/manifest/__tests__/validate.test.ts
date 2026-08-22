@@ -241,3 +241,166 @@ describe('column detection', () => {
     expect(findHeaderRow(parseCsv('1,2,3\n4,5,6'))).toBe(-1)
   })
 })
+
+/**
+ * The customer's actual pickup list, transcribed verbatim.
+ *
+ * Everything that made it fail before is preserved: the title on row 1, the
+ * header on row 2, "SR" as a running serial rather than a slot, the container
+ * number written only on the first vehicle of each pair, and — on the second
+ * sheet — a blank spacer row between pairs.
+ */
+describe('the real TATA MOTORS pickup list', () => {
+  const SHEET = [
+    ['TATA MOTORS CULVNSA2601795 20x40 ', '', '', '', '', ''],
+    ['SR', 'CHASSIS NO', 'MODEL', 'INVOICE NO', 'CONT NO', 'SEAL'],
+    ['1', 'MAT752389T7R20507', 'T.7 ULTRA DCR35HSD 155E4M6', 'MH2730495315', 'TGCU5033177', '11866'],
+    ['2', 'MAT464844TSR09249', 'ARCTIC_WHITE-YODHA 2.2L SC 4X4 E4', 'MH2730502737', '', ''],
+    ['3', 'MAT752389T7R18439', 'T.7 ULTRA DCR35HSD 155E4M6', 'MH2730495315', 'CAIU7456843', '13046'],
+    ['4', 'MAT464844TSR09184', 'ARCTIC_WHITE-YODHA 2.2L SC 4X4 E4', 'MH2730502737', '', ''],
+    ['', '', '', '', '', ''],
+    ['5', 'MAT752389T7R20477', 'T.7 ULTRA DCR35HSD 155E4M6', 'MH2730495315', 'TGCU5034147', '13048'],
+    ['6', 'MAT464844TSR09120', 'ARCTIC_WHITE-YODHA 2.2L SC 4X4 E4', 'MH2730502737', '', ''],
+  ]
+
+  const header = findHeaderRow(SHEET)
+  const map = detectColumns(SHEET[header]!)
+  const body = SHEET.slice(header + 1)
+  const result = validateRows(body, map)
+
+  it('finds the header under the title row', () => {
+    expect(header).toBe(1)
+    expect(isUsableMapping(map)).toBe(true)
+  })
+
+  it('maps chassis before container, and picks up invoice and seal', () => {
+    expect(map).toMatchObject({
+      chassisNo: 1, makeModel: 2, invoiceNo: 3, containerNo: 4, sealNo: 5,
+    })
+  })
+
+  it('does not mistake the SR serial for a slot number', () => {
+    // "SR" runs 1..40 down the sheet. Read as a slot it rejects every row past
+    // the sixth, and silently mis-slots the ones before it.
+    expect(map.sequenceNo).toBeUndefined()
+  })
+
+  it('accepts every vehicle row', () => {
+    expect(result.rejectedCount).toBe(0)
+    expect(result.validCount).toBe(6)
+    expect(result.errorSummary).toEqual({})
+  })
+
+  it('carries the container forward to the second vehicle of each pair', () => {
+    const byChassis = (c: string) => result.rows.find((r) => r.chassis_no === c)!
+    expect(byChassis('MAT752389T7R20507').container_no).toBe('TGCU5033177')
+    expect(byChassis('MAT464844TSR09249').container_no).toBe('TGCU5033177')
+    expect(byChassis('MAT752389T7R18439').container_no).toBe('CAIU7456843')
+    expect(byChassis('MAT464844TSR09184').container_no).toBe('CAIU7456843')
+  })
+
+  it('discloses every inherited container instead of inheriting silently', () => {
+    expect(result.warningSummary.CONTAINER_INHERITED).toBe(3)
+    const second = result.rows.find((r) => r.chassis_no === 'MAT464844TSR09249')!
+    expect(second.container_inherited).toBe(true)
+    expect(second.warnings.join(' ')).toContain('TGCU5033177')
+  })
+
+  it('does not let a blank spacer row break the pairing', () => {
+    const after = result.rows.find((r) => r.chassis_no === 'MAT752389T7R20477')!
+    expect(after.container_no).toBe('TGCU5034147')
+    expect(after.container_inherited).toBeUndefined()
+  })
+
+  it('does not warn about inferred slots when the file has no such column', () => {
+    // Otherwise every row of every real upload carries a warning, and the
+    // banner that flags genuine anomalies gets ignored.
+    expect(result.warningSummary.SEQUENCE_INFERRED).toBeUndefined()
+  })
+
+  it('numbers the slots from row order within each container', () => {
+    const slots = result.rows.map((r) => [r.container_no, r.sequence_no])
+    expect(slots).toEqual([
+      ['TGCU5033177', 1], ['TGCU5033177', 2],
+      ['CAIU7456843', 1], ['CAIU7456843', 2],
+      ['TGCU5034147', 1], ['TGCU5034147', 2],
+    ])
+  })
+
+  it('keeps the seal on the container row, not on both vehicles', () => {
+    const rows = result.rows.filter((r) => r.container_no === 'TGCU5033177')
+    expect(rows.map((r) => r.seal_no)).toEqual(['11866', undefined])
+    expect(rows.map((r) => r.invoice_no))
+      .toEqual(['MH2730495315', 'MH2730502737'])
+  })
+
+  it('validates the real container numbers against ISO 6346', () => {
+    for (const c of ['TGCU5033177', 'CAIU7456843', 'TGCU5034147', 'CICU7368618',
+                     'CICU7048574', 'TRHU8755445', 'CAIU4330430', 'FFAU3426306',
+                     'CULU6322000', 'TGBU8901124', 'TRHU6366932']) {
+      expect(isValidContainerNo(c), c).toBe(true)
+    }
+  })
+
+  it('catches the one number in the real list that is mistyped', () => {
+    // BMOU6433014 appears on the customer's sheet and fails its own check
+    // digit — 20 of the 21 numbers in that file are clean, this one is not.
+    // Rejecting it at upload is the whole point: otherwise a driver discovers
+    // it standing at a container that will never match.
+    const r = validateRows(
+      [['MAT752389T7R20507', 'BMOU6433014']],
+      { chassisNo: 0, containerNo: 1 },
+    )
+    expect(codes(r, 1)).toEqual(['CONTAINER_CHECK_DIGIT'])
+    // And it says what the number probably should have been.
+    expect(r.rows[0]!.errors[0]).toContain('BMOU6433015')
+  })
+})
+
+describe('container carry-forward is bounded', () => {
+  const MAP6 = { chassisNo: 0, containerNo: 1 }
+
+  it('refuses a third blank row rather than overfilling the container', () => {
+    const r = validateRows([
+      ['MAT752389T7R20507', 'TGCU5033177'],
+      ['MAT464844TSR09249', ''],
+      ['MAT464844TSR09184', ''],      // nobody assigned this one anywhere
+    ], MAP6)
+    expect(codes(r, 3)).toEqual(['CONTAINER_MISSING'])
+  })
+
+  it('does not inherit into a file that writes the container on every row', () => {
+    // Here the blank row is a genuine omission, not the second half of a pair:
+    // the container above it already has both its vehicles.
+    const r = validateRows([
+      ['MAT752389T7R20507', 'TGCU5033177'],
+      ['MAT464844TSR09249', 'TGCU5033177'],
+      ['MAT464844TSR09184', ''],
+    ], MAP6)
+    expect(codes(r, 3)).toEqual(['CONTAINER_MISSING'])
+    expect(r.rows[2]!.container_no).toBe('')
+  })
+
+  it('refuses to inherit when no container has been declared yet', () => {
+    const r = validateRows([['MAT464844TSR09249', '']], MAP6)
+    expect(codes(r, 1)).toEqual(['CONTAINER_MISSING'])
+  })
+
+  it('can be turned off, and then rejects the second vehicle of every pair', () => {
+    const r = validateRows([
+      ['MAT752389T7R20507', 'TGCU5033177'],
+      ['MAT464844TSR09249', ''],
+    ], MAP6, { carryForwardContainer: false })
+    expect(codes(r, 2)).toEqual(['CONTAINER_MISSING'])
+  })
+
+  it('still applies the check digit to an inherited number', () => {
+    // Inheriting must not be a way past validation the written row would fail.
+    const r = validateRows([
+      ['MAT752389T7R20507', 'TGCU5033178'],   // one digit out
+      ['MAT464844TSR09249', ''],
+    ], MAP6)
+    expect(codes(r, 1)).toEqual(['CONTAINER_CHECK_DIGIT'])
+    expect(codes(r, 2)).toEqual(['CONTAINER_CHECK_DIGIT'])
+  })
+})
