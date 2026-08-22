@@ -105,22 +105,23 @@ export function ManifestUploadPage() {
             />
             <p className="text-sm text-ink-600">
               The list exactly as it arrives: container number written once per pair,
-              a running SR column, no sequence column. One container in it,
-              BMOU6433014, fails its own check digit — the first button shows what
-              happens to it, the second is the same list with that one corrected.
+              a running SR column, no sequence column. The workbook holds two plans
+              for the same 40 vehicles — the current one, and the earlier one it
+              replaced, which still carries a container number that fails its own
+              check digit.
             </p>
             <div className="mt-3 flex flex-wrap gap-3">
               <Button
                 variant="secondary"
-                onClick={() => { setError(null); setFile(samplePickupListFile(false)) }}
+                onClick={() => { setError(null); setFile(samplePickupListFile('current')) }}
               >
-                Load it as received
+                Load the current plan
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => { setError(null); setFile(samplePickupListFile(true)) }}
+                onClick={() => { setError(null); setFile(samplePickupListFile('earlier')) }}
               >
-                Load it corrected
+                Load the earlier plan
               </Button>
             </div>
           </Card>

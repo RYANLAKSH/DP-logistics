@@ -32,8 +32,8 @@ await page.click('text=Manifests')
 await page.waitForSelector('text=/Upload/i', { timeout: 10000 })
 await page.click('a:has-text("Upload"), button:has-text("Upload")').catch(() => {})
 await page.goto(`${BASE}#/manager/manifests/upload`)
-await page.waitForSelector('text=Load it as received', { timeout: 15000 })
-await page.click('button:has-text("Load it as received")')
+await page.waitForSelector('text=Load the earlier plan', { timeout: 15000 })
+await page.click('button:has-text("Load the earlier plan")')
 await page.click('button:has-text("Parse and preview")')
 await page.waitForSelector('text=Rows', { timeout: 20000 })
 const asReceived = await page.textContent('body')
@@ -46,11 +46,11 @@ await page.screenshot({ path: `${OUT}/03-preview-as-received.png`, fullPage: tru
 
 // --- manager: the corrected list, published --------------------------------
 await page.goto(`${BASE}#/manager/manifests/upload`)
-await page.waitForSelector('text=Load it corrected', { timeout: 10000 })
-await page.click('button:has-text("Load it corrected")')
+await page.waitForSelector('text=Load the current plan', { timeout: 10000 })
+await page.click('button:has-text("Load the current plan")')
 await page.click('button:has-text("Parse and preview")')
 await page.waitForSelector('text=Rows', { timeout: 20000 })
-report.correctedPublishable =
+report.currentPlanPublishable =
   (await page.locator('button:has-text("Publish manifest")').isDisabled()) === false
 await page.click('button:has-text("Publish manifest")')
 await page.waitForSelector('text=/PUBLISHED|Manifests/i', { timeout: 20000 })
@@ -65,7 +65,7 @@ await page.fill('input[type=password]', 'x')
 await page.click('button[type=submit]')
 await page.waitForSelector('text=/pickup|Next|Start/i', { timeout: 20000 })
 const home = await page.textContent('body')
-report.driverSeesRealContainer = /TGCU5033177|CAIU7456843|TGCU5034147/.test(home)
+report.driverSeesRealContainer = /TRHU8755445|CAIU4330430|TGBU8901124/.test(home)
 report.driverSeesRealChassis = /MAT752389T7R|MAT464844TSR/.test(home)
 await page.screenshot({ path: `${OUT}/05-driver-home.png`, fullPage: true })
 
