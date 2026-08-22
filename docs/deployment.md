@@ -10,8 +10,18 @@ Everything needed to run this in production, in the order you need it.
 |---|---|---|
 | `VITE_SUPABASE_URL` | yes | Project URL, e.g. `https://abcd.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | yes | The anon key. **Public by design** — it is in the JavaScript |
-| `VITE_OCR_ASSET_BASE` | no | Defaults to `/ocr` |
-| `APP_VERSION` | recommended | Stamped onto every movement record |
+| `VITE_OCR_ASSET_BASE` | no | Defaults to `/ocr`. Point it at a CDN if you serve the engine separately |
+| `VITE_APP_VERSION` | recommended | Stamped onto every movement record and every error report |
+| `VITE_ERROR_ENDPOINT` | recommended | Where crash reports are POSTed. See §8 |
+
+`VITE_ERROR_ENDPOINT` takes a URL that accepts a JSON POST — a Sentry
+[minimal endpoint](https://docs.sentry.io/), a log drain, or a function of your
+own. There is no SDK and no key: the payload is `{message, stack, where, role,
+release, at, online}` and nothing else. `where` is the route pattern with every
+identifier stripped by an allowlist, so a crash report cannot become a second,
+unaudited copy of the manifest. If you point this at a service that also wants
+an API key, put the key in a proxy you control — never in a `VITE_` variable,
+which ships in the bundle.
 
 With neither Supabase variable set the app runs against the in-memory mock.
 That is a development convenience; make sure your production build has both,
@@ -140,8 +150,37 @@ requirements:
 | `verify_audit_chain()` | Tampering | Any break, immediately |
 | Clock skew > 5 minutes | A wrong timezone, or a device being manipulated | Any pattern |
 
-Ship browser errors somewhere (Sentry or equivalent) — a driver will not report
-a white screen, they will stop using the app.
+Ship browser errors somewhere — set `VITE_ERROR_ENDPOINT`. A driver will not
+report a white screen, they will stop using the app, and you will hear about it
+as "the system is unreliable" three weeks later.
+
+### Scheduled jobs
+
+Two jobs must run, both as the service role. `pg_cron` in the same project is
+the least moving parts:
+
+```sql
+-- Retention: remove photographs past evidence_retention_months, keep the
+-- record and the hashes. Batched, so a long-overdue first run does not lock
+-- anything up; schedule it hourly and it will drain and then idle.
+select cron.schedule('purge-evidence', '17 * * * *',
+  $$ select app.purge_expired_evidence(500) $$);
+
+-- Integrity: verify the audit hash chain, and anchor the head externally.
+select cron.schedule('verify-audit', '0 2 * * *',
+  $$ select verify_audit_chain() $$);
+```
+
+Check retention is actually working, as an admin, before trusting it:
+
+```sql
+select * from retention_pending();
+-- org_id | retention_months | attempts_due | oldest
+```
+
+`attempts_due` climbing day after day means the job has stopped. That is the
+failure mode worth alerting on: a retention job nobody can observe is a
+retention job nobody will notice has died.
 
 ## 9. Backups
 
@@ -179,41 +218,80 @@ Before any production migration:
 
 ## 11. Production readiness checklist
 
-**Security**
-- [ ] Public sign-up disabled, and verified by attempting one
-- [ ] MFA enforced for ADMIN
-- [ ] Service role key absent from the bundle:
-      ```bash
-      grep -rq "service_role\|SUPABASE_SERVICE" apps/pwa/dist && echo LEAK || echo clean
-      ```
-      (note the explicit test — `grep | head` always exits 0 and will tell you
-      everything is fine no matter what it found)
-- [ ] Both storage buckets private
-- [ ] Security headers served, CSP `connect-src` names the project
-- [ ] Rate limits configured on auth
-- [ ] `./scripts/db-test.sh` green, including `97_attack.sql`
-- [ ] `npm audit` clean
+Run it, do not read it:
 
-**Correctness**
-- [ ] `./scripts/test-all.sh` green
-- [ ] `99_acceptance.sql` green against the production schema
-- [ ] Concurrency script green
-- [ ] A real end-to-end movement completed on a real phone, on the real yard's Wi-Fi
+```bash
+npm run build -w @dp/pwa      # the bundle checks need a build
+./scripts/production-check.sh
+```
 
-**Operability**
-- [ ] Error reporting receiving events
-- [ ] The monitoring queries in §8 running
-- [ ] Audit chain verification scheduled, with an external anchor
-- [ ] Evidence retention job scheduled and tested
-- [ ] Backups confirmed, and a restore tested
+It verifies 24 properties of the repository and the built bundle — no
+service-role key in the bundle, RLS forced and hoistable, the retention purge
+unreachable from a user token, the app chunk inside its budget, the framework
+split out, the browser target pinned, an error boundary present, the audit
+chain verifiable — and exits non-zero if any of them is false.
 
-**People**
-- [ ] Admin, managers and drivers created; yards assigned
-- [ ] Driver devices registered and approved
-- [ ] Drivers shown the flow, including what to do when blocked
-- [ ] Managers shown the exception queue and the override consequences
-- [ ] A paper fallback agreed for the day the system is down
+What it deliberately does **not** claim to check, because a script cannot:
 
-The last one matters. A verification system with no agreed fallback becomes a
-reason to stop loading vehicles, and that is how a control gets switched off
-permanently.
+- a restore from backup, actually performed into a scratch project
+- one real movement completed on a real phone, on the yard's own network
+- public sign-up disabled, verified by attempting one
+- MFA enforced for `ADMIN`
+- the error endpoint receiving events
+- **a paper fallback agreed with the yard for the day this is down**
+
+That last one is not ceremony. A verification system with no agreed fallback
+becomes a reason to stop loading vehicles, and that is how a control gets
+switched off permanently — not by a decision, but by one bad morning.
+
+Alongside it, the test suite is the other half of the gate:
+
+```bash
+./scripts/test-all.sh         # parser, app, database + RLS, concurrency, browser
+```
+
+## 12. What this audit changed, and why it matters in production
+
+Recorded because each of these was invisible until the volumes were realistic,
+and each will be re-introduced by someone who does not know why it is the way
+it is.
+
+**RLS was evaluated once per row.** Policies called `app.current_org()` and
+`app.can_see_yard(yard_id)` inline. Seeded with 300,000 audit rows — under a
+year for one busy yard — a manager counting their own audit log took **15.2
+seconds**. Written so the planner hoists them (`(select app.current_org())`,
+and `yard_id in (select unnest(app.visible_yards()))`), the same count takes
+**96 ms**, returning identical rows for every role. `30_rls.sql` pins the shape
+structurally, because a timing test on a fixture database proves nothing.
+
+**The bundle split did not split.** `manualChunks` keyed on package names, so
+`'react-dom'` never matched `react-dom/client` — what the app imports. React
+shipped inside the app chunk, so every release re-downloaded the framework.
+Matching by path took the per-deploy download from **78.5 KB to 12.5 KB**
+gzipped. The mock backend, the CSV parser and the XLSX reader were also on the
+login critical path of a configured build; they are behind a dynamic import
+now.
+
+**Evidence images were 339 KB each.** Two per vehicle, forty vehicles a shift:
+27 MB per driver over yard mobile data. At the measured setting they are 231 KB
+— 18 MB a shift. Resolution was kept and quality spent, because the two are not
+interchangeable: pixels on a plate cannot be recovered by any amount of
+quality, and the plate is what the photograph is for.
+
+**Retention was a setting nothing acted on.** `evidence_retention_months` has
+been in the schema since the beginning and no job ever read it — a promise in a
+contract and a storage bill that grows for ever. `app.purge_expired_evidence()`
+now removes the photographs and keeps the record: the movement, the attempt,
+the SHA-256 of each image and the audit log all survive, so what the image
+*was* stays provable after the image is gone. It runs as the service role from
+a schedule and is explicitly revoked from `authenticated` — a token in a
+driver's phone that can delete evidence is not a retention policy, it is a way
+to destroy the case against a bad movement.
+
+**There was no error boundary.** One thrown error unmounted the whole tree: a
+driver mid-shift holding a blank phone, with no message and no record. The
+worst failure the app had, because nobody learns it happened.
+
+**Six accessibility defects**, including five controls under the 44 px touch
+floor — Sign out, the sync pill, and the exception rows on the board at 22 px —
+and an unlabelled filter. `npm run e2e:a11y` keeps them fixed.

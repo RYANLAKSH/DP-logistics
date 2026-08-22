@@ -14,6 +14,7 @@
     "e2e": "node e2e/smoke.mjs",
     "e2e:acceptance": "node e2e/acceptance.mjs",
     "e2e:denials": "node e2e/denials.mjs",
+    "e2e:a11y": "node e2e/a11y.mjs",
     "e2e:manifest": "node e2e/manifest.mjs",
     "prepare:ocr": "node scripts/prepare-ocr.mjs",
     "e2e:ocr": "node e2e/ocr.mjs",
