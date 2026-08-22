@@ -49,8 +49,8 @@ async function scan(which, value) {
   await driver.waitForSelector('text=Collect')
 }
 
-await scan('container', 'CULVNSA2601795')
-await scan('chassis', 'MAT111222A1B00001')   // belongs to another container
+await scan('container', 'TRHU8755445')
+await scan('chassis', 'MAT752389T7R18439')   // belongs to another container
 await driver.click('button:has-text("Verify vehicle")')
 await driver.waitForSelector('text=DO NOT LOAD', { timeout: 20000 })
 

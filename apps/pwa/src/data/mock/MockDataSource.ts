@@ -460,13 +460,17 @@ export class MockDataSource implements DataSource {
         byContainer.set(row.containerNo, list)
       }
 
-      this.assignments = [...byContainer.entries()].flatMap(([containerNo, list]) =>
+      this.assignments = [...byContainer.entries()].flatMap(([containerNo, list], ci) =>
         list.map((row, i) => ({
           id: `a-${manifestId}-${containerNo}-${i + 1}`,
           manifestId,
           yardId: source!.yardId,
           containerId: `c-${manifestId}-${containerNo}`,
           containerNo,
+          // The order the file listed them in, which is the order the yard
+          // loads them. Map iteration preserves insertion, and insertion is
+          // row order.
+          containerSequenceNo: ci + 1,
           expectedVehicleCount: list.length,
           containerFilled: 0,
           chassisNo: row.chassisNo,

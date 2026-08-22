@@ -30,7 +30,13 @@ async function upload(fixture) {
   await page.goto(`${BASE}/manager/manifests/upload`)
   await page.setInputFiles('input[type=file]', resolve(HERE, 'fixtures', fixture))
   await page.click('button:has-text("Parse and preview")')
-  await page.waitForSelector('text=Rows', { timeout: 10000 })
+  // Wait for the route, not for a word. An unquoted text= selector is a
+  // case-insensitive SUBSTRING match, so `text=Rows` matched the phrase "blank
+  // rows between pairs" on the upload page and every assertion below then read
+  // the page before the one under test — while reporting a plausible failure
+  // about validation instead of about the wait.
+  await page.waitForURL('**/manager/manifests/import/**', { timeout: 15000 })
+  await page.waitForSelector('table', { timeout: 15000 })
   const body = await page.textContent('body')
   const publish = page.locator('button:has-text("Publish manifest")')
   return { body, publishDisabled: await publish.isDisabled() }

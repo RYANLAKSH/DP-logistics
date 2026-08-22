@@ -16,7 +16,7 @@ const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
   permissions: ['camera'],
 })
-await ctx.addInitScript(cameraStubScript('CULVNSA2601795'))
+await ctx.addInitScript(cameraStubScript('TRHU8755445'))
 
 const page = await ctx.newPage()
 const errors = []
@@ -41,7 +41,7 @@ await page.screenshot({ path: `${OUT}/31-ocr-result.png` })
 
 const body = await page.textContent('body')
 const detected = body.includes('Detected')
-const readCorrectly = body.includes('CULV NSA2 6017 95') || body.includes('CULVNSA2601795')
+const readCorrectly = body.includes('TRHU 8755 445') || body.includes('TRHU8755445')
 const confidenceShown = /Confidence \d+%/.test(body)
 
 await browser.close()

@@ -20,7 +20,14 @@ export function pickNextAssignment(assignments: Assignment[]): Assignment | null
     .filter((a) => a.status === 'PENDING' || a.status === 'IN_PROGRESS')
     .sort(
       (a, b) =>
-        a.containerNo.localeCompare(b.containerNo) || a.sequenceNo - b.sequenceNo,
+        // Manifest order first. It used to sort by container number, which
+        // reads like sequence and is not: the plan's order follows the yard,
+        // the alphabet follows nothing. Container number only breaks ties, so
+        // the order stays stable when a manifest carries no sequence.
+        (a.containerSequenceNo ?? Number.MAX_SAFE_INTEGER)
+          - (b.containerSequenceNo ?? Number.MAX_SAFE_INTEGER)
+        || a.containerNo.localeCompare(b.containerNo)
+        || a.sequenceNo - b.sequenceNo,
     )
 
   for (const candidate of workable) {

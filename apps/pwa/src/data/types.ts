@@ -63,6 +63,13 @@ export interface Assignment {
   yardId: string
   containerId: string
   containerNo: string
+  /**
+   * Where this container sits in the manifest's own order. Loading order is
+   * the plan's order, not alphabetical — the plan follows bay position and the
+   * order trucks are available, and a driver sent up and down the yard by an
+   * accident of the alphabet loses the morning.
+   */
+  containerSequenceNo?: number
   bayPosition?: string
   expectedVehicleCount: number
   containerFilled: number

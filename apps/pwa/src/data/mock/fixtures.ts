@@ -4,8 +4,8 @@
  * The scenario is the one in the build plan, so the screens are exercised
  * against the numbers the business actually uses:
  *
- *   CULVNSA2601795   MAT752389T7R19810 (1 of 2)
- *                    MAT464844TSR09249 (2 of 2)
+ *   TRHU8755445   MAT752389T7R20588 (1 of 2)
+ *                 MAT464844TSR09113 (2 of 2)
  */
 import type {
   ActivityItem, Assignment, AuditEntry, ExceptionRecord, Manifest,
@@ -49,22 +49,31 @@ interface Spec {
   done?: number
 }
 
+/**
+ * Straight from the pickup list, so the fixture obeys the rule the product
+ * exists to hold: each chassis appears against exactly one container, and each
+ * container carries exactly two. The first entry is the acceptance scenario.
+ *
+ * The two models alternate the way the real list does — a T.7 ULTRA loaded
+ * first, a YODHA second — because the sequence rule is what stops a driver
+ * loading them the other way round.
+ */
 const SPECS: Spec[] = [
-  { container: 'CULVNSA2601795', bay: 'Bay C · row 4', done: 0, vehicles: [
-    { chassis: 'MAT752389T7R19810', reg: 'MH04 AB 1234', model: 'Tata Nexon', colour: 'White' },
-    { chassis: 'MAT464844TSR09249', reg: 'MH04 AB 5678', model: 'Tata Punch', colour: 'Blue' },
+  { container: 'TRHU8755445', bay: 'Bay C · row 4', done: 0, vehicles: [
+    { chassis: 'MAT752389T7R20588', reg: 'MH04 AB 1234', model: 'T.7 ULTRA DCR35HSD', colour: 'White' },
+    { chassis: 'MAT464844TSR09113', reg: 'MH04 AB 5678', model: 'YODHA 2.2L SC 4X4', colour: 'Arctic White' },
   ]},
-  { container: 'CULVNSA2601796', bay: 'Bay C · row 5', done: 0, vehicles: [
-    { chassis: 'MAT111222A1B00001', reg: 'MH04 CD 1111', model: 'Tata Tiago', colour: 'Red' },
-    { chassis: 'MAT111222A1B00002', reg: 'MH04 CD 2222', model: 'Tata Tiago', colour: 'Grey' },
+  { container: 'CAIU4330430', bay: 'Bay C · row 5', done: 0, vehicles: [
+    { chassis: 'MAT752389T7R18439', reg: 'MH04 CD 1111', model: 'T.7 ULTRA DCR35HSD', colour: 'White' },
+    { chassis: 'MAT464844TSR09257', reg: 'MH04 CD 2222', model: 'YODHA 2.2L SC 4X4', colour: 'Arctic White' },
   ]},
-  { container: 'CULVNSA2601797', bay: 'Bay D · row 1', done: 2, vehicles: [
-    { chassis: 'MAT333444C3D00011', reg: 'MH04 EF 3333', model: 'Tata Altroz', colour: 'Silver' },
-    { chassis: 'MAT333444C3D00012', reg: 'MH04 EF 4444', model: 'Tata Altroz', colour: 'Black' },
+  { container: 'TGBU8901124', bay: 'Bay D · row 1', done: 2, vehicles: [
+    { chassis: 'MAT752389T7R19760', reg: 'MH04 EF 3333', model: 'T.7 ULTRA DCR35HSD', colour: 'White' },
+    { chassis: 'MAT464844TSR09235', reg: 'MH04 EF 4444', model: 'YODHA 2.2L SC 4X4', colour: 'Arctic White' },
   ]},
-  { container: 'CULVNSA2601798', bay: 'Bay D · row 2', done: 1, vehicles: [
-    { chassis: 'MAT555666E5F00021', reg: 'MH04 GH 5555', model: 'Tata Harrier', colour: 'White' },
-    { chassis: 'MAT555666E5F00022', reg: 'MH04 GH 6666', model: 'Tata Harrier', colour: 'Green' },
+  { container: 'TRHU6366932', bay: 'Bay D · row 2', done: 1, vehicles: [
+    { chassis: 'MAT752389T7R20607', reg: 'MH04 GH 5555', model: 'T.7 ULTRA DCR35HSD', colour: 'White' },
+    { chassis: 'MAT464844TSR09065', reg: 'MH04 GH 6666', model: 'YODHA 2.2L SC 4X4', colour: 'Arctic White' },
   ]},
 ]
 
@@ -75,6 +84,7 @@ export const ASSIGNMENTS: Assignment[] = SPECS.flatMap((spec, ci) =>
     yardId: 'yard-nsa',
     containerId: `c-${ci + 1}`,
     containerNo: spec.container,
+    containerSequenceNo: ci + 1,
     bayPosition: spec.bay,
     expectedVehicleCount: spec.vehicles.length,
     containerFilled: spec.done ?? 0,
@@ -104,8 +114,8 @@ export const MOVEMENTS: MovementEvent[] = ASSIGNMENTS
 export const EXCEPTIONS: ExceptionRecord[] = [
   { id: 'x-1', yardId: 'yard-nsa', assignmentId: 'a-4-2', type: 'WRONG_VEHICLE',
     status: 'OPEN', severity: 1,
-    expectedValue: 'CULVNSA2601798 / MAT555666E5F00022',
-    actualValue: 'CULVNSA2601798 / MAT333444C3D00012',
+    expectedValue: 'TRHU6366932 / MAT464844TSR09065',
+    actualValue: 'TRHU6366932 / MAT464844TSR09235',
     description: 'Blocked by server verification: WRONG_VEHICLE',
     raisedBy: 'u-driver-2', raisedByName: 'Dina Driver',
     raisedAt: new Date(Date.now() - 8 * 60_000).toISOString() },
@@ -161,19 +171,19 @@ export const SAMPLE_IMPORT: ManifestImport = {
   validCount: 4,
   rejectedCount: 2,
   rows: [
-    { rowNo: 1, containerNo: 'CULVNSA2601795', chassisNo: 'MAT752389T7R19810',
+    { rowNo: 1, containerNo: 'TRHU8755445', chassisNo: 'MAT752389T7R20588',
       sequenceNo: 1, errors: [], warnings: [] },
-    { rowNo: 2, containerNo: 'CULVNSA2601795', chassisNo: 'MAT464844TSR09249',
+    { rowNo: 2, containerNo: 'TRHU8755445', chassisNo: 'MAT464844TSR09113',
       sequenceNo: 2, errors: [], warnings: [] },
-    { rowNo: 3, containerNo: 'CULVNSA2601796', chassisNo: 'MAT111222A1B00001',
+    { rowNo: 3, containerNo: 'CAIU4330430', chassisNo: 'MAT752389T7R18439',
       sequenceNo: 1, errors: [], warnings: [] },
-    { rowNo: 4, containerNo: 'CULVNSA2601796', chassisNo: 'MAT111222A1B00002',
+    { rowNo: 4, containerNo: 'CAIU4330430', chassisNo: 'MAT464844TSR09257',
       sequenceNo: 2, errors: [], warnings: [] },
     { rowNo: 5, containerNo: '', chassisNo: 'MAT999888Z9Y00033', sequenceNo: 1,
       errors: ['Container number is missing'], warnings: [] },
-    { rowNo: 6, containerNo: 'CULVNSA2601797', chassisNo: 'MAT752389T7R19810',
+    { rowNo: 6, containerNo: 'TGBU8901124', chassisNo: 'MAT752389T7R20588',
       sequenceNo: 1,
-      errors: ['Chassis MAT752389T7R19810 is already assigned to CULVNSA2601795'],
+      errors: ['Chassis MAT752389T7R20588 is already assigned to TRHU8755445'],
       warnings: [] },
   ],
 }

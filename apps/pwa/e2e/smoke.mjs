@@ -26,7 +26,7 @@ const ctx = await browser.newContext({
 // This Chromium exposes no capture device and its fake-device flag has no
 // effect, so the stream comes from a canvas. Everything downstream — openCamera,
 // captureFrame, the preprocessing and the real engine — runs unchanged.
-await ctx.addInitScript(cameraStubScript('CULVNSA2601795'))
+await ctx.addInitScript(cameraStubScript('TRHU8755445'))
 const page = await ctx.newPage()
 const errors = []
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
@@ -65,9 +65,9 @@ async function scan(which, value) {
   await page.waitForSelector('text=Collect')
 }
 
-await scan('container', 'CULVNSA2601795')
+await scan('container', 'TRHU8755445')
 await shot('03-scan-container')
-await scan('chassis', 'MAT752389T7R19810')
+await scan('chassis', 'MAT752389T7R20588')
 
 await page.waitForSelector('button:has-text("Verify vehicle")')
 await shot('04-both-scanned')
@@ -88,9 +88,9 @@ await page.waitForURL('**/driver')
 await page.waitForSelector('text=Next pickup')
 const secondChassis = await page.textContent('.code')
 await page.click('text=Start this pickup')
-await scan('container', 'CULVNSA2601795')
+await scan('container', 'TRHU8755445')
 // A vehicle that belongs to a different container.
-await scan('chassis', 'MAT111222A1B00001')
+await scan('chassis', 'MAT752389T7R18439')
 await page.click('button:has-text("Verify vehicle")')
 await page.waitForSelector('text=DO NOT LOAD', { timeout: 10000 })
 const blockedHasNoConfirm =

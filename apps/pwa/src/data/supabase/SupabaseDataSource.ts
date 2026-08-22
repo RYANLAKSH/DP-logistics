@@ -673,6 +673,7 @@ interface TaskRow {
   chassis_no: string; sequence_no: number; vehicle_reg_no: string | null
   make_model: string | null; colour: string | null; claimed_by: string | null
   container_id: string; container_no: string; bay_position: string | null
+  container_sequence: number | null
   expected_vehicle_count: number; manifest_id: string; yard_id: string
   container_filled: number; is_completed: boolean
 }
@@ -684,6 +685,7 @@ function toAssignment(r: TaskRow): Assignment {
     yardId: r.yard_id,
     containerId: r.container_id,
     containerNo: r.container_no,
+    containerSequenceNo: r.container_sequence ?? undefined,
     bayPosition: r.bay_position ?? undefined,
     expectedVehicleCount: r.expected_vehicle_count,
     containerFilled: r.container_filled,

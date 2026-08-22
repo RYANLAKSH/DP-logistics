@@ -29,6 +29,7 @@ run "database + RLS"   ./scripts/db-test.sh
 run "concurrency"      ./scripts/db-concurrency.sh
 
 if curl -sf -o /dev/null "${E2E_BASE_URL:-http://localhost:4173}/login"; then
+  run "e2e: acceptance"     npm run e2e:acceptance -w @dp/pwa
   run "e2e: driver + roles" npm run e2e -w @dp/pwa
   run "e2e: manifests"      npm run e2e:manifest -w @dp/pwa
   run "e2e: exceptions"     npm run e2e:exceptions -w @dp/pwa

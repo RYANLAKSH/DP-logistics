@@ -18,7 +18,7 @@ const browser = await chromium.launch(executablePath ? { executablePath } : {})
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 }, permissions: ['camera'],
 })
-await ctx.addInitScript(cameraStubScript('CULVNSA2601795'))
+await ctx.addInitScript(cameraStubScript('TRHU8755445'))
 
 const page = await ctx.newPage()
 const errors = []
@@ -61,8 +61,8 @@ async function scan(which, value) {
 // ------------------------------------------------------------------ offline
 await ctx.setOffline(true)
 
-await scan('container', 'CULVNSA2601795')
-await scan('chassis', 'MAT752389T7R19810')
+await scan('container', 'TRHU8755445')
+await scan('chassis', 'MAT752389T7R20588')
 await page.screenshot({ path: `${OUT}/50-offline-scanned.png` })
 
 // The app must keep working with no connection at all.
