@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Card, CardHeader } from '@/components/Card'
 import { ManagerShell } from '@/components/Layout'
-import { useData } from '@/data/provider'
+import { useData, useIsMockBackend } from '@/data/provider'
+import { samplePickupListFile } from '@/data/mock/samplePickupList'
 
 const MAX_BYTES = 10 * 1024 * 1024
 const ACCEPTED = ['.csv', '.xlsx', '.xls']
 
 export function ManifestUploadPage() {
   const data = useData()
+  const isMock = useIsMockBackend()
   const navigate = useNavigate()
   const [file, setFile] = useState<File | null>(null)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -91,6 +93,38 @@ export function ManifestUploadPage() {
             {busy ? 'Parsing…' : 'Parse and preview'}
           </Button>
         </Card>
+
+        {/* Only on fixtures. Picking a file is the one step of this flow that
+            cannot be demonstrated without one, and on a phone it is the step
+            people give up at. */}
+        {isMock && (
+          <Card>
+            <CardHeader
+              title="Or try the real pickup list"
+              subtitle="TATA MOTORS CULVNSA2601795 — 20 containers, 40 vehicles"
+            />
+            <p className="text-sm text-ink-600">
+              The list exactly as it arrives: container number written once per pair,
+              a running SR column, no sequence column. One container in it,
+              BMOU6433014, fails its own check digit — the first button shows what
+              happens to it, the second is the same list with that one corrected.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => { setError(null); setFile(samplePickupListFile(false)) }}
+              >
+                Load it as received
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => { setError(null); setFile(samplePickupListFile(true)) }}
+              >
+                Load it corrected
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <Card>
           <CardHeader title="Expected columns" />

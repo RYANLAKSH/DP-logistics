@@ -413,7 +413,10 @@ export class MockDataSource implements DataSource {
 
     const result = validateRows(grid.slice(headerRow + 1), map, { operatingDate: date })
     this.lastImport = {
-      id: SAMPLE_IMPORT.id,
+      // A fresh id per parse, as the server gives. Reusing one meant a second
+      // upload landed on the first one's preview URL, and the screen showed
+      // the cached earlier parse.
+      id: `imp-${Math.random().toString(36).slice(2, 10)}`,
       yardId,
       operatingDate: date,
       fileName: file.name,
@@ -435,17 +438,60 @@ export class MockDataSource implements DataSource {
     return delay(snapshot(this.lastImport))
   }
 
+  /**
+   * Publishing replaces the live assignments with the ones just uploaded.
+   *
+   * It used to return a manifest with hardcoded totals and change nothing
+   * else, which made the mock useless for the question people actually ask of
+   * it: "does MY list work?" Building the assignments from the parsed rows
+   * means an uploaded file is walkable all the way to a driver's task list, on
+   * the real numbers, through the real parser and the real matching rules.
+   */
   async publishManifestImport(importId: string): Promise<Manifest> {
-    void importId
+    const source = this.lastImport?.id === importId ? this.lastImport : null
+    const manifestId = `man-${Math.random().toString(36).slice(2, 8)}`
+    const rows = (source?.rows ?? []).filter((r) => r.errors.length === 0)
+
+    if (rows.length > 0) {
+      const byContainer = new Map<string, typeof rows>()
+      for (const row of rows) {
+        const list = byContainer.get(row.containerNo) ?? []
+        list.push(row)
+        byContainer.set(row.containerNo, list)
+      }
+
+      this.assignments = [...byContainer.entries()].flatMap(([containerNo, list]) =>
+        list.map((row, i) => ({
+          id: `a-${manifestId}-${containerNo}-${i + 1}`,
+          manifestId,
+          yardId: source!.yardId,
+          containerId: `c-${manifestId}-${containerNo}`,
+          containerNo,
+          expectedVehicleCount: list.length,
+          containerFilled: 0,
+          chassisNo: row.chassisNo,
+          sequenceNo: row.sequenceNo ?? i + 1,
+          status: 'PENDING' as const,
+        })))
+
+      // A new manifest is a new shift's work. Movements and exceptions raised
+      // against the superseded one would otherwise read as this shift's.
+      this.movements = []
+      this.exceptions = []
+      this.activity = []
+    }
+
     const published: Manifest = {
-      id: `man-${Math.random().toString(36).slice(2, 8)}`,
-      yardId: 'yard-nsa',
+      id: manifestId,
+      yardId: source?.yardId ?? 'yard-nsa',
       yardName: 'Nhava Sheva',
-      operatingDate: new Date().toISOString().slice(0, 10),
+      operatingDate: source?.operatingDate ?? new Date().toISOString().slice(0, 10),
       version: this.manifests.length + 1,
       status: 'PUBLISHED',
-      totalContainers: 2,
-      totalVehicles: 4,
+      totalContainers: rows.length > 0
+        ? new Set(rows.map((r) => r.containerNo)).size
+        : 2,
+      totalVehicles: rows.length > 0 ? rows.length : 4,
       publishedAt: new Date().toISOString(),
       publishedBy: this.profile?.fullName ?? 'Manoj Manager',
     }

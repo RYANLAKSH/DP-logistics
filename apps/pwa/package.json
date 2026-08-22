@@ -16,7 +16,9 @@
     "prepare:ocr": "node scripts/prepare-ocr.mjs",
     "e2e:ocr": "node e2e/ocr.mjs",
     "e2e:exceptions": "node e2e/exceptions.mjs",
-    "e2e:offline": "node e2e/offline.mjs"
+    "e2e:offline": "node e2e/offline.mjs",
+    "build:demo": "vite build --config vite.demo.config.ts && node scripts/build-demo.mjs",
+    "e2e:demo": "node e2e/demo-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
