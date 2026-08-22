@@ -1,0 +1,4 @@
+# SPA fallback. Without this, a deep link like /manager/exceptions returns a
+# 404 on a hard reload or when opened fresh from a shared link — the app only
+# has one entry point, index.html, and the router takes it from there.
+/*    /index.html   200
