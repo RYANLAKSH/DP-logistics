@@ -20,7 +20,8 @@ import type { ConnectionState } from '@/lib/realtime'
 import {
   detectColumns, findHeaderRow, isUsableMapping, parseDelimited, validateRows,
 } from '@shared/manifest/index.ts'
-import { isXlsx, readWorkbook } from '@/lib/xlsx/read'
+import { readWorkbook } from '@/lib/xlsx/read'
+import { sniffManifestKind } from '@/lib/manifestFile'
 import {
   ACTIVITY, ASSIGNMENTS, AUDIT, EXCEPTIONS, MANIFESTS, MOVEMENTS,
   SAMPLE_IMPORT, USERS, YARDS,
@@ -406,9 +407,11 @@ export class MockDataSource implements DataSource {
     let grid: string[][]
     let sheetName: string | undefined
 
-    if (file.name.toLowerCase().endsWith('.csv')) {
+    // Sniffed, not trusted from the name: see lib/manifestFile.
+    const kind = await sniffManifestKind(file, file.name)
+    if (kind === 'csv') {
       grid = parseDelimited(await file.text())
-    } else if (isXlsx(file.name)) {
+    } else if (kind === 'xlsx') {
       const sheets = await readWorkbook(file)
       if (sheets.length === 0) throw new Error('That workbook has no sheets in it.')
       // A workbook with several sheets is usually several versions of one
@@ -421,7 +424,7 @@ export class MockDataSource implements DataSource {
       sheetName = (usable ?? sheets[0]!).name
     } else {
       throw new Error(
-        `Cannot read "${file.name}". Upload a .csv or a .xlsx — an older .xls has to be saved as one of those first.`,
+        `Cannot read "${file.name}". Upload a CSV or a .xlsx — an older .xls has to be saved as one of those first.`,
       )
     }
 

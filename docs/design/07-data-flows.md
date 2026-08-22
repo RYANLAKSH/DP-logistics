@@ -59,11 +59,20 @@ every row, a sequence column. The customer's actual list is none of those things
       A     B                   C                 D             E            F
  1    TATA MOTORS CULVNSA2601795 20x40
  2    SR    CHASSIS NO           MODEL             INVOICE NO    CONT NO      SEAL
- 3    1     MAT752389T7R20507    T.7 ULTRA …       MH2730495315  TGCU5033177  11866
- 4    2     MAT464844TSR09249    …YODHA …          MH2730502737
- 5    3     MAT752389T7R18439    T.7 ULTRA …       MH2730495315  CAIU7456843  13046
- 6    4     MAT464844TSR09184    …YODHA …          MH2730502737
+ 3    1     MAT752389T7R18439    T.7 ULTRA …       MH2730495315  CAIU4330430  13053
+ 4    2     MAT464844TSR09257    …YODHA …          MH2730502738  CAIU4330430
+ 5
+ 6    3     MAT752389T7R19760    T.7 ULTRA …       MH2730495315  TGBU8901124  13062
+ 7    4     MAT464844TSR09235    …YODHA …          MH2730502738  TGBU8901124
 ```
+
+Operations have since standardised on writing the container on **both** rows of a
+pair — the form above, and the one the sample in the app uses. It costs whoever
+prepares the list a few seconds and it removes the only inference this parser
+makes: the pairing a driver is held to is then the pairing a person wrote down.
+Earlier lists named the container on the first vehicle only and left the second
+blank; those still parse, by the carry-forward described below, and every row it
+touched is marked in the preview.
 
 Four things in that block break naive parsing, and each has a named answer in the code:
 

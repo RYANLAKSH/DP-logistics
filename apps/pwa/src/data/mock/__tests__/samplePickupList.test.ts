@@ -53,8 +53,11 @@ describe('the pickup list', () => {
     expect(result.errorSummary.CONTAINER_CHECK_DIGIT).toBeUndefined()
   })
 
-  it('carries every container number forward to its second vehicle', () => {
-    expect(result.warningSummary.CONTAINER_INHERITED).toBe(20)
+  it('needs nothing inferred: every row states its own container', () => {
+    // The standardised form. A pairing a driver is held to should be one a
+    // person wrote down, not one the parser worked out.
+    expect(result.warningSummary).toEqual({})
+    expect(accepted.some((r) => r.container_inherited)).toBe(false)
   })
 
   it('survives the blank spacer rows between pairs', () => {

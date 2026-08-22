@@ -88,9 +88,21 @@ export function ManagerShell({
         className="border-b border-line/20 bg-ink-900 text-paper
                    lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r"
       >
-        <div className="px-4 py-4">
+        {/* On a phone the identity and the way out have to be in the header,
+            because the sidebar block below is a sidebar only from lg up. They
+            were in that block alone, which left a manager on a phone signed in
+            with no way to sign out — and no way to tell whose session it was
+            on a device more than one person uses. */}
+        <div className="flex items-center justify-between gap-3 px-4 py-4">
           <div className="inline-block rounded-lg bg-white px-3 py-2">
             <BrandLogo width={168} />
+          </div>
+          <div className="text-right text-sm lg:hidden">
+            <p className="font-medium text-paper">{profile?.fullName}</p>
+            <p className="text-xs text-paper/60">{profile?.role}</p>
+            <button onClick={signOut} className="mt-0.5 underline text-paper/75">
+              Sign out
+            </button>
           </div>
         </div>
         {/* Hiding a link the role cannot use is courtesy, not security: the

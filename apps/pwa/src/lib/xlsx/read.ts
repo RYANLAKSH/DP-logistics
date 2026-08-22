@@ -151,14 +151,3 @@ function readSheet(doc: Document, shared: string[]): string[][] {
   return rows
 }
 
-/**
- * The sheet a manifest should be read from.
- *
- * A workbook with several sheets is usually several versions of one plan, and
- * reading the wrong one silently loads yesterday's allocation. Rather than
- * guess, this returns them all and lets the caller decide — the mock takes the
- * first that yields a usable table, and the preview names which one it read.
- */
-export function isXlsx(name: string): boolean {
-  return name.toLowerCase().endsWith('.xlsx')
-}
