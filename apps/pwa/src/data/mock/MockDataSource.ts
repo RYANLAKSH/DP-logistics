@@ -13,8 +13,9 @@ import { pickNextAssignment } from '../nextAssignment'
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationOutcome,
-  VerificationResult, Yard,
+  VerificationResult, Yard, YardBoard,
 } from '../types'
+import type { ConnectionState } from '@/lib/realtime'
 import {
   detectColumns, findHeaderRow, isUsableMapping, parseDelimited, validateRows,
 } from '@shared/manifest/index.ts'
@@ -318,6 +319,53 @@ export class MockDataSource implements DataSource {
         mine.filter((a) => a.status === 'IN_PROGRESS').map((a) => a.claimedBy),
       ).size,
     })
+  }
+
+  async getBoard(yardId: string, date?: string): Promise<YardBoard> {
+    const counters = await this.getDashboard(yardId)
+    const containers = new Map<string, { capacity: number; filled: number; bay: string | null }>()
+    for (const a of this.assignments.filter((x) => x.yardId === yardId)) {
+      const entry = containers.get(a.containerNo)
+        ?? { capacity: a.expectedVehicleCount, filled: 0, bay: a.bayPosition ?? null }
+      if (a.status === 'COMPLETED') entry.filled += 1
+      containers.set(a.containerNo, entry)
+    }
+    return delay(snapshot({
+      yardId,
+      operatingDate: date ?? new Date().toISOString().slice(0, 10),
+      counters: {
+        vehiclesScheduled: counters.vehiclesScheduled,
+        vehiclesCompleted: counters.vehiclesCompleted,
+        vehiclesInProgress: counters.vehiclesInProgress,
+        vehiclesException: counters.vehiclesException,
+        vehiclesPending: counters.vehiclesPending,
+        activeDrivers: counters.activeDrivers,
+      },
+      containers: [...containers.entries()]
+        .map(([container_no, v]) => ({
+          container_no, bay_position: v.bay, capacity: v.capacity, filled: v.filled,
+        }))
+        .sort((a, b) => a.container_no.localeCompare(b.container_no)),
+      openExceptions: counters.openExceptions,
+      activity: this.activity.filter((a) => a.kind === 'MOVEMENT').slice(0, 30),
+      exceptionFeed: this.activity.filter((a) => a.kind === 'EXCEPTION').slice(0, 30),
+    }))
+  }
+
+  /**
+   * The mock has no realtime, and says so rather than pretending.
+   *
+   * A dashboard that claims to be live and silently is not is worse than one
+   * that shows a disconnected state: a manager may believe a truck has been
+   * stopped when it has not.
+   */
+  subscribeToYard(
+    _yardId: string,
+    _onChange: () => void,
+    onState: (state: ConnectionState) => void,
+  ): () => void {
+    onState('offline')
+    return () => {}
   }
 
   async listActivity(yardId: string): Promise<ActivityItem[]> {

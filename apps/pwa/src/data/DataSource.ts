@@ -14,7 +14,9 @@
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
+  YardBoard,
 } from './types'
+import type { ConnectionState } from '@/lib/realtime'
 
 export interface ScanSubmission {
   assignmentId: string
@@ -86,6 +88,21 @@ export interface DataSource {
   // manager
   getDashboard(yardId: string): Promise<DashboardCounters>
   listActivity(yardId: string): Promise<ActivityItem[]>
+  /** Everything the board shows, in one round trip. */
+  getBoard(yardId: string, date?: string): Promise<YardBoard>
+  /**
+   * Subscribe to yard activity. Returns an unsubscribe function.
+   *
+   * The handler is a signal to refetch, never data to render — see
+   * src/lib/realtime.ts. A backend with no realtime returns a no-op and
+   * reports 'offline', which the UI must show honestly rather than pretending
+   * to be live.
+   */
+  subscribeToYard(
+    yardId: string,
+    onChange: () => void,
+    onState: (state: ConnectionState) => void,
+  ): () => void
   listManifests(): Promise<Manifest[]>
   getManifestImport(id: string): Promise<ManifestImport | null>
   parseManifestFile(file: File, yardId: string, date: string): Promise<ManifestImport>

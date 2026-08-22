@@ -215,3 +215,28 @@ export interface ManifestImport {
   rejectedCount: number
   rows: ParsedManifestRow[]
 }
+
+export interface BoardContainer {
+  container_no: string
+  bay_position: string | null
+  capacity: number
+  filled: number
+}
+
+/** Everything the manager's board renders, from one call. */
+export interface YardBoard {
+  yardId: string
+  operatingDate: string
+  counters: {
+    vehiclesScheduled: number
+    vehiclesCompleted: number
+    vehiclesInProgress: number
+    vehiclesException: number
+    vehiclesPending: number
+    activeDrivers: number
+  }
+  containers: BoardContainer[]
+  openExceptions: number
+  activity: ActivityItem[]
+  exceptionFeed: ActivityItem[]
+}

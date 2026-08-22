@@ -110,6 +110,16 @@ await mp.waitForURL('**/manager')
 await mp.waitForSelector('text=Vehicles scheduled')
 await mp.screenshot({ path: `${OUT}/07-manager-dashboard.png`, fullPage: true })
 
+// The board must never claim to be live when it is not: the mock backend has
+// no realtime, so the badge has to say so and show the data's age.
+const boardBody = await mp.textContent('body')
+const honestConnectionState = boardBody.includes('Not live')
+  && boardBody.includes('showing data from')
+// Filters are present and usable.
+await mp.click('button:has-text("EXCEPTIONS")')
+await mp.waitForTimeout(300)
+const feedFilterWorks = (await mp.textContent('body')).includes('EXCEPTIONS')
+
 await mp.click('a:has-text("Exceptions")')
 await mp.waitForSelector('text=Open (')
 await mp.screenshot({ path: `${OUT}/08-manager-exceptions.png`, fullPage: true })
@@ -162,6 +172,8 @@ const report = {
   managerBlockedFromAdminRoute: true,
   managerDoesNotSeeUsersLink: managerSeesUsersLink === false,
   adminReachesUsers,
+  honestConnectionState,
+  feedFilterWorks,
   errors,
 }
 console.log(JSON.stringify(report, null, 2))

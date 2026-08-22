@@ -13,7 +13,9 @@ import type {
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
+  YardBoard,
 } from '../types'
+import type { ConnectionState } from '@/lib/realtime'
 import { pickNextAssignment } from '../nextAssignment'
 import { getSupabase } from './client'
 
@@ -266,6 +268,53 @@ export class SupabaseDataSource implements DataSource {
       activeDrivers: row.active_drivers ?? 0,
       openExceptions: openExceptions.count ?? 0,
     }
+  }
+
+  async getBoard(yardId: string, date?: string): Promise<YardBoard> {
+    const data = unwrap(
+      await this.db.rpc('yard_board', { p_yard_id: yardId, p_date: date ?? null }),
+    ) as RawBoard
+    return {
+      yardId: data.yardId,
+      operatingDate: data.operatingDate,
+      counters: data.counters,
+      containers: data.containers,
+      openExceptions: data.openExceptions,
+      activity: (data.activity ?? []).map(toActivity),
+      exceptionFeed: (data.exceptionFeed ?? []).map(toActivity),
+    }
+  }
+
+  /**
+   * One channel per yard, filtered SERVER-side.
+   *
+   * An unfiltered subscription sends every organisation's changes to every
+   * listening client for RLS to reject — a performance problem, and one
+   * misconfigured policy away from a data leak.
+   */
+  subscribeToYard(
+    yardId: string,
+    onChange: () => void,
+    onState: (state: ConnectionState) => void,
+  ): () => void {
+    onState('connecting')
+    const channel = this.db
+      .channel(`yard:${yardId}`)
+      .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'movement_events',
+            filter: `yard_id=eq.${yardId}` },
+          () => onChange())
+      .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'exceptions',
+            filter: `yard_id=eq.${yardId}` },
+          () => onChange())
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') onState('live')
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onState('reconnecting')
+        else if (status === 'CLOSED') onState('offline')
+      })
+
+    return () => { void this.db.removeChannel(channel) }
   }
 
   async listActivity(yardId: string): Promise<ActivityItem[]> {
@@ -546,6 +595,40 @@ interface MovementRow {
   id: string; assignment_id: string; yard_id: string
   expected_container_no: string; expected_chassis_no: string
   driver_id: string; verified_at: string; status: MovementEvent['status']
+}
+
+interface RawBoard {
+  yardId: string
+  operatingDate: string
+  counters: YardBoard['counters']
+  containers: YardBoard['containers']
+  openExceptions: number
+  activity: RawFeedItem[]
+  exceptionFeed: RawFeedItem[]
+}
+
+interface RawFeedItem {
+  id: string
+  kind: ActivityItem['kind']
+  occurred_at: string
+  actor_name: string | null
+  container_no: string | null
+  chassis_no: string | null
+  detail: string | null
+  exception_type: ExceptionRecord['type'] | null
+}
+
+function toActivity(r: RawFeedItem): ActivityItem {
+  return {
+    id: r.id,
+    kind: r.kind,
+    occurredAt: r.occurred_at,
+    actorName: r.actor_name ?? 'unknown',
+    containerNo: r.container_no ?? undefined,
+    chassisNo: r.chassis_no ?? undefined,
+    detail: r.detail ?? undefined,
+    exceptionType: r.exception_type ?? undefined,
+  }
 }
 
 interface ActivityRow {
