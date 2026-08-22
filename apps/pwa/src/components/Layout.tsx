@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useSession } from '@/lib/session'
+import { BrandFooter, BrandLogo, BrandMark } from '@/components/Brand'
 
 /** The driver shell: one column, big type, nothing decorative. */
 export function DriverShell({
@@ -28,7 +29,11 @@ export function DriverShell({
             </button>
           )}
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-bold">{title}</h1>
+            <div className="flex items-center gap-2">
+              <BrandMark height={16} className="shrink-0 text-paper/80" />
+              <span className="text-paper/30" aria-hidden="true">|</span>
+              <h1 className="truncate text-lg font-bold">{title}</h1>
+            </div>
             {subtitle && <p className="truncate text-sm text-paper/70">{subtitle}</p>}
           </div>
           {action}
@@ -83,9 +88,10 @@ export function ManagerShell({
         className="border-b border-line/20 bg-ink-900 text-paper
                    lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r"
       >
-        <div className="flex items-center gap-2 px-4 py-4">
-          <span aria-hidden="true" className="text-brand-500">✓</span>
-          <span className="font-bold tracking-tight">DP Verify</span>
+        <div className="px-4 py-4">
+          <div className="inline-block rounded-lg bg-white px-3 py-2">
+            <BrandLogo width={168} />
+          </div>
         </div>
         {/* Hiding a link the role cannot use is courtesy, not security: the
             route guard refuses it and RLS returns nothing regardless. */}
@@ -113,6 +119,7 @@ export function ManagerShell({
           <button onClick={signOut} className="underline hover:text-paper">
             Sign out
           </button>
+          <BrandFooter className="mt-6 text-left text-paper/40" />
         </div>
       </nav>
 

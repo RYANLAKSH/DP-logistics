@@ -412,7 +412,7 @@ function CameraBlocked({
             <ul className="mt-1 list-disc space-y-1 pl-5">
               <li><strong>Android, Chrome:</strong> tap the lock icon in the address bar → Permissions → Camera → Allow.</li>
               <li><strong>iPhone, Safari:</strong> Settings → Safari → Camera → Allow, then reload.</li>
-              <li><strong>Installed app:</strong> your phone’s Settings → Apps → DP Verify → Permissions.</li>
+              <li><strong>Installed app:</strong> your phone’s Settings → Apps → RYLA Verify → Permissions.</li>
             </ul>
           </div>
         )}

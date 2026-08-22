@@ -33,12 +33,12 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
       manifest: {
-        name: 'DP Verify — Vehicle & Container Verification',
-        short_name: 'DP Verify',
+        name: 'RYLA Verify — Vehicle & Container Verification',
+        short_name: 'RYLA Verify',
         description:
           'Scan the container and the chassis. The movement completes only when both match the manifest.',
-        theme_color: '#0b1220',
-        background_color: '#0b1220',
+        theme_color: '#1B3149',
+        background_color: '#1B3149',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

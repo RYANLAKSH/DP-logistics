@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/Button'
+import { BrandLogo } from '@/components/Brand'
 
 function Shell({ code, title, detail }: { code: string; title: string; detail: string }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+      <BrandLogo width={160} className="mb-2" />
       <p className="code text-5xl font-bold text-ink-600">{code}</p>
       <h1 className="text-2xl font-bold text-ink-900">{title}</h1>
       <p className="max-w-md text-ink-600">{detail}</p>

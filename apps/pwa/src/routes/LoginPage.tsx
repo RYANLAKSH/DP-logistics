@@ -2,9 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { homeFor, useSession } from '@/lib/session'
+import { BrandFooter, BrandLogo } from '@/components/Brand'
+import { useIsMockBackend } from '@/data/provider'
 
 export function LoginPage() {
   const { profile, signIn, loading } = useSession()
+  const isMock = useIsMockBackend()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,10 +33,14 @@ export function LoginPage() {
   return (
     <div className="flex min-h-dvh flex-col justify-center bg-ink-900 px-5 py-10">
       <div className="mx-auto w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <p className="text-4xl text-brand-500" aria-hidden="true">✓</p>
-          <h1 className="mt-2 text-2xl font-bold text-paper">DP Verify</h1>
-          <p className="mt-1 text-sm text-paper/70">
+        <div className="mb-8 flex flex-col items-center text-center">
+          {/* On navy, the logo needs its own light plate: the wordmark is navy
+              and the tagline is grey, and neither survives being placed
+              directly on the shell's background. */}
+          <div className="rounded-card bg-white px-6 py-4">
+            <BrandLogo width={216} />
+          </div>
+          <p className="mt-4 text-sm text-paper/70">
             The right vehicle, into the right container.
           </p>
         </div>
@@ -77,12 +84,18 @@ export function LoginPage() {
           </Button>
 
           {/* Phase 3 only. Removed when Supabase Auth lands in phase 4. */}
-          <p className="rounded-lg bg-warn-100 px-3 py-2 text-xs text-ink-700">
-            <strong>Phase 3 shell.</strong> No authentication is wired yet. Sign in with
-            <code className="code"> driver@</code>, <code className="code">manager@</code> or
-            <code className="code"> admin@</code> to preview each role.
-          </p>
+          {/* Only shown on the mock backend; with Supabase configured there is
+              nothing to preview and this would be misleading. */}
+          {isMock && (
+            <p className="rounded-lg bg-warn-100 px-3 py-2 text-xs text-ink-700">
+              <strong>Demo data.</strong> No backend is configured. Sign in with
+              <code className="code"> driver@</code>, <code className="code">manager@</code> or
+              <code className="code"> admin@</code> to preview each role.
+            </p>
+          )}
         </form>
+
+        <BrandFooter className="mt-6 text-paper/60" />
       </div>
     </div>
   )

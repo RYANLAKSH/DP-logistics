@@ -8,26 +8,30 @@
    and tap targets that are generous rather than tidy.
    --------------------------------------------------------------------------- */
 @theme {
-  --color-ink-950: #06090f;
-  --color-ink-900: #0b1220;
-  --color-ink-800: #111a2b;
-  --color-ink-700: #1c2739;
-  --color-ink-600: #334155;
-  --color-line: #2b3a52;
+  /* RYLA Global Services. Navy and orange, taken from the mark. */
+  --color-ink-950: #0F1E2E;
+  --color-ink-900: #1B3149;   /* the wordmark navy */
+  --color-ink-800: #24405C;
+  --color-ink-700: #33506E;
+  --color-ink-600: #5A7086;
+  --color-line: #8A9AA8;      /* the rules either side of GLOBAL SERVICES */
 
-  --color-paper: #f7f9fc;
-  --color-paper-dim: #e5eaf2;
+  --color-paper: #F7F9FC;
+  --color-paper-dim: #E5EAF2;
 
-  --color-brand-400: #5eead4;
-  --color-brand-500: #38d9a9;
-  --color-brand-600: #14b88a;
+  --color-brand-400: #FF9E4D;
+  --color-brand-500: #F58220;  /* the accent in the Y */
+  --color-brand-600: #D96C10;
 
   /* Status colours. Never the only signal — every status also carries an icon
      and a word, for sunlight and for colour blindness alike. */
   --color-ok-500: #16a34a;
   --color-ok-100: #dcfce7;
-  --color-warn-500: #d97706;
-  --color-warn-100: #fef3c7;
+  /* Deliberately pushed amber, away from the brand orange: the two must not
+     be mistaken for one another on a screen read in sunlight. Status is never
+     colour alone, but making them distinct costs nothing. */
+  --color-warn-500: #A85B06;
+  --color-warn-100: #FDF0D5;
   --color-bad-500: #dc2626;
   --color-bad-100: #fee2e2;
   --color-info-500: #2563eb;

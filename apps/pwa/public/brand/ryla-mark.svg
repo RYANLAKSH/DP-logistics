@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 190" role="img" aria-label="RYLA">
+  <title>RYLA</title>
+  <g fill="currentColor">
+    <path fill-rule="evenodd"
+          d="M20 20h132c33 0 53 24 53 56 0 24-13 43-33 51l36 43h-58l-31-38H62v38H20V20Zm42 42h88c9 0 15 6 15 14s-6 14-15 14H62V62Z"/>
+    <path d="M352 20h48l-72 90v60h-44v-60L352 20Z"/>
+    <path d="M428 20h44v106h88v44H428V20Z"/>
+    <path d="M696 20c-17 0-29 10-34 26l-72 124h52l54-98h4l54 98h52l-76-124c-5-16-17-26-34-26Z"/>
+  </g>
+  <!-- The accent keeps its colour whatever the wordmark is set to. -->
+  <path fill="#F58220" d="M222 20h48l58 90h-44L222 20Z"/>
+</svg>

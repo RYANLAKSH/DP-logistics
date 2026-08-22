@@ -1,9 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DP Verify">
-  <rect width="64" height="64" rx="12" fill="#0b1220"/>
-  <rect x="10" y="19" width="44" height="27" rx="3" fill="#111a2b" stroke="#e9eef5" stroke-width="2"/>
-  <g stroke="#1e293b" stroke-width="2">
-    <path d="M17 21v23M23 21v23M29 21v23M41 21v23M47 21v23"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RYLA Verify">
+  <rect width="512" height="512" rx="96" fill="#1B3149"/>
+  <g fill="#FFFFFF">
+    <path fill-rule="evenodd"
+          d="M104 128h176c46 0 74 33 74 77 0 33-18 59-46 70l50 59h-80l-43-52h-59v52h-72V128Zm72 58h116c13 0 21 8 21 19s-8 19-21 19H176v-38Z"/>
   </g>
-  <path d="M24 33.5l6 6 12-13" fill="none" stroke="#38d9a9" stroke-width="5"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <path fill="#F58220" d="M300 300h74l-46 84h-74l46-84Z"/>
 </svg>

@@ -3,9 +3,10 @@
 import { deflateSync } from 'node:zlib'
 import { writeFileSync } from 'node:fs'
 
-const BG = [11, 18, 32]
-const FG = [56, 217, 169]
-const LINE = [233, 238, 245]
+// Brand palette, from the RYLA mark.
+const BG = [27, 49, 73]      // #1B3149 navy
+const FG = [245, 130, 32]    // #F58220 orange accent
+const LINE = [255, 255, 255] // wordmark
 
 function crc32(buf) {
   let c, crc = 0xffffffff
@@ -25,22 +26,26 @@ function chunk(type, data) {
 }
 
 function png(size, path) {
+  // A bold R with the orange accent slash beneath it — the RYLA mark reduced
+  // to what still reads at 192 pixels on a home screen.
   const px = (x, y) => {
     const u = x / size, v = y / size
-    // container body
-    const inBody = u > 0.16 && u < 0.84 && v > 0.30 && v < 0.72
-    const border = inBody && (u < 0.19 || u > 0.81 || v < 0.33 || v > 0.69)
-    // corrugation ribs
-    const rib = inBody && !border && Math.floor((u - 0.19) * 26) % 3 === 0
-    // check mark
-    const cx = u - 0.50, cy = v - 0.52
-    const check =
-      (Math.abs(cy - (-0.9 * cx)) < 0.035 && cx > -0.02 && cx < 0.16) ||
-      (Math.abs(cy - (1.1 * cx)) < 0.035 && cx > -0.14 && cx < -0.01)
-    if (check) return FG
-    if (border) return LINE
-    if (rib) return [30, 41, 59]
-    if (inBody) return [17, 26, 43]
+
+    // R: stem, bowl, counter, leg.
+    const inStem = u >= 0.20 && u <= 0.34 && v >= 0.25 && v <= 0.75
+    const inBowl = u > 0.34 && u <= 0.68 && v >= 0.25 && v <= 0.50
+    const inCounter = u > 0.34 && u <= 0.60 && v > 0.335 && v <= 0.415
+    // Leg: a diagonal band from the bowl down to the baseline.
+    const legT = (v - 0.50) / 0.25
+    const legX = 0.40 + legT * 0.24
+    const inLeg = v > 0.50 && v <= 0.75 && Math.abs(u - legX) < 0.075
+
+    if ((inStem || (inBowl && !inCounter) || inLeg)) return LINE
+
+    // The accent, bottom right.
+    const ax = u - 0.66, ay = v - 0.78
+    if (ay > -0.10 && ay < 0.10 && Math.abs(ax + ay * 0.55) < 0.075) return FG
+
     return BG
   }
 
