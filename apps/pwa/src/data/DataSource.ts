@@ -92,7 +92,14 @@ export interface DataSource {
   publishManifestImport(importId: string): Promise<Manifest>
   listAssignments(yardId: string): Promise<Assignment[]>
   listExceptions(yardId: string): Promise<ExceptionRecord[]>
+  acknowledgeException(id: string): Promise<ExceptionRecord>
   resolveException(id: string, resolution: string, note: string): Promise<ExceptionRecord>
+  cancelException(id: string, note: string): Promise<ExceptionRecord>
+  /** Driver asks; only a different person can approve. */
+  requestOverride(exceptionId: string, note: string): Promise<ExceptionRecord>
+  approveOverride(
+    exceptionId: string, reason: string, note: string,
+  ): Promise<{ movementId: string }>
   listUsers(): Promise<Profile[]>
   listAuditEntries(): Promise<AuditEntry[]>
 }

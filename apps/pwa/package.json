@@ -14,7 +14,8 @@
     "e2e": "node e2e/smoke.mjs",
     "e2e:manifest": "node e2e/manifest.mjs",
     "prepare:ocr": "node scripts/prepare-ocr.mjs",
-    "e2e:ocr": "node e2e/ocr.mjs"
+    "e2e:ocr": "node e2e/ocr.mjs",
+    "e2e:exceptions": "node e2e/exceptions.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

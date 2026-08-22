@@ -432,8 +432,45 @@ export class SupabaseDataSource implements DataSource {
     return (rows as ExceptionRow[]).map(toException)
   }
 
-  async resolveException(): Promise<ExceptionRecord> {
-    throw new Error('Exception resolution arrives in phase 9')
+  async acknowledgeException(id: string): Promise<ExceptionRecord> {
+    return toException(
+      unwrap(await this.db.rpc('acknowledge_exception', { p_exception_id: id })) as never,
+    )
+  }
+
+  async resolveException(
+    id: string, resolution: string, note: string,
+  ): Promise<ExceptionRecord> {
+    return toException(
+      unwrap(await this.db.rpc('resolve_exception', {
+        p_exception_id: id, p_resolution: resolution, p_note: note,
+      })) as never,
+    )
+  }
+
+  async cancelException(id: string, note: string): Promise<ExceptionRecord> {
+    return toException(
+      unwrap(await this.db.rpc('cancel_exception', {
+        p_exception_id: id, p_note: note,
+      })) as never,
+    )
+  }
+
+  async requestOverride(exceptionId: string, note: string): Promise<ExceptionRecord> {
+    return toException(
+      unwrap(await this.db.rpc('request_override', {
+        p_exception_id: exceptionId, p_note: note,
+      })) as never,
+    )
+  }
+
+  async approveOverride(
+    exceptionId: string, reason: string, note: string,
+  ): Promise<{ movementId: string }> {
+    const data = unwrap(await this.db.rpc('approve_override', {
+      p_exception_id: exceptionId, p_reason: reason, p_note: note,
+    })) as { movement_id: string }
+    return { movementId: data.movement_id }
   }
 
   async listUsers(): Promise<Profile[]> {
@@ -570,6 +607,10 @@ function toException(r: ExceptionRow): ExceptionRecord {
     type: r.type,
     status: r.status,
     severity: r.severity,
+    overrideRequested: (r as ExceptionRow & { override_requested?: boolean })
+      .override_requested ?? false,
+    acknowledgedAt: (r as ExceptionRow & { acknowledged_at?: string | null })
+      .acknowledged_at ?? undefined,
     expectedValue: r.expected_value ?? undefined,
     actualValue: r.actual_value ?? undefined,
     description: r.description ?? undefined,

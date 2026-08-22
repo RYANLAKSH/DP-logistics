@@ -11,13 +11,37 @@ import { relativeTime } from '@/lib/format'
 import type { ExceptionRecord } from '@/data/types'
 
 const RESOLUTIONS = [
-  { code: 'CORRECTED_AND_RESCANNED', label: 'Driver corrected and rescanned' },
-  { code: 'MANIFEST_AMENDED', label: 'Manifest was wrong — amended' },
-  { code: 'MANUAL_ENTRY_AUTHORISED', label: 'Authorised manual entry' },
-  { code: 'TASK_REASSIGNED', label: 'Reassigned to another driver' },
-  { code: 'VEHICLE_RESCHEDULED', label: 'Vehicle rescheduled' },
-  { code: 'NO_ACTION_REQUIRED', label: 'No action required' },
-  { code: 'FALSE_ALARM', label: 'Raised in error' },
+  { code: 'CORRECTED_AND_RESCANNED', label: 'Driver corrected and rescanned',
+    effect: 'Releases the task back to the driver' },
+  { code: 'MANIFEST_AMENDED', label: 'Manifest was wrong — amended',
+    effect: 'The task stays blocked until the amendment is published' },
+  { code: 'MANUAL_ENTRY_AUTHORISED', label: 'Authorised manual entry',
+    effect: 'Releases the task; the typed value is marked as authorised' },
+  { code: 'TASK_REASSIGNED', label: 'Reassigned to another driver',
+    effect: 'The task stays blocked for this driver' },
+  { code: 'VEHICLE_RESCHEDULED', label: 'Vehicle rescheduled',
+    effect: 'Cancels the assignment for today' },
+  { code: 'NO_ACTION_REQUIRED', label: 'No action required',
+    effect: 'Releases the task back to the driver' },
+  { code: 'FALSE_ALARM', label: 'Raised in error',
+    effect: 'Releases the task. Counts towards the false-alarm rate' },
+]
+
+/**
+ * Overrides are NOT in the list above, deliberately.
+ *
+ * An override lets a vehicle be loaded into a container the manifest did not
+ * assign — the one operation that defeats the product's core control. It has
+ * its own action, its own reason codes, and dual control enforced in the
+ * database. Offering it as a dropdown entry alongside "no action required"
+ * would make the most serious decision on this screen the easiest one to make.
+ */
+const OVERRIDE_REASONS = [
+  { code: 'LAST_MINUTE_SUBSTITUTION', label: 'Last-minute substitution' },
+  { code: 'MANIFEST_ERROR', label: 'The manifest is wrong' },
+  { code: 'DAMAGED_PLATE', label: 'Plate damaged or unreadable' },
+  { code: 'OPERATIONAL_EXCEPTION', label: 'Operational exception' },
+  { code: 'OTHER', label: 'Other (explain below)' },
 ]
 
 export function ExceptionsPage() {
@@ -30,14 +54,29 @@ export function ExceptionsPage() {
     queryFn: () => data.listExceptions('yard-nsa'),
   })
 
+  const [error, setError] = useState<string | null>(null)
+
+  function afterChange() {
+    setSelected(null)
+    setError(null)
+    void queryClient.invalidateQueries({ queryKey: ['exceptions'] })
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] })
+    void queryClient.invalidateQueries({ queryKey: ['activity'] })
+  }
+
   const resolve = useMutation({
     mutationFn: ({ id, code, note }: { id: string; code: string; note: string }) =>
       data.resolveException(id, code, note),
-    onSuccess: () => {
-      setSelected(null)
-      void queryClient.invalidateQueries({ queryKey: ['exceptions'] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-    },
+    onSuccess: afterChange,
+    onError: (e) => setError(e instanceof Error ? e.message : 'That could not be saved.'),
+  })
+
+  const override = useMutation({
+    mutationFn: ({ id, reason, note }: { id: string; reason: string; note: string }) =>
+      data.approveOverride(id, reason, note),
+    onSuccess: afterChange,
+    onError: (e) => setError(e instanceof Error ? e.message : 'That could not be approved.'),
   })
 
   const open = exceptions?.filter((x) => x.status === 'OPEN' || x.status === 'UNDER_REVIEW') ?? []
@@ -86,11 +125,15 @@ export function ExceptionsPage() {
             {selected ? (
               <ResolvePanel
                 record={selected}
-                busy={resolve.isPending}
+                busy={resolve.isPending || override.isPending}
+                error={error}
                 onResolve={(code, note) =>
                   resolve.mutate({ id: selected.id, code, note })
                 }
-                onClose={() => setSelected(null)}
+                onOverride={(reason, note) =>
+                  override.mutate({ id: selected.id, reason, note })
+                }
+                onClose={() => { setSelected(null); setError(null) }}
               />
             ) : (
               <Card>
@@ -150,16 +193,21 @@ function ExceptionRow({
 }
 
 function ResolvePanel({
-  record, onResolve, onClose, busy,
+  record, onResolve, onOverride, onClose, busy, error,
 }: {
   record: ExceptionRecord
   onResolve: (code: string, note: string) => void
+  onOverride: (reason: string, note: string) => void
   onClose: () => void
   busy: boolean
+  error: string | null
 }) {
   const [code, setCode] = useState(RESOLUTIONS[0]!.code)
   const [note, setNote] = useState('')
+  const [overrideMode, setOverrideMode] = useState(false)
+  const [overrideReason, setOverrideReason] = useState(OVERRIDE_REASONS[0]!.code)
   const done = record.status === 'RESOLVED' || record.status === 'CANCELLED'
+  const effect = RESOLUTIONS.find((r) => r.code === code)?.effect
 
   return (
     <Card className="sticky top-4">
@@ -214,9 +262,76 @@ function ResolvePanel({
             />
           </label>
 
-          <Button type="submit" disabled={busy}>
+          <p className="text-xs text-ink-600">{effect}</p>
+
+          {error && (
+            <p role="alert" className="rounded-lg bg-bad-100 px-3 py-2 text-sm text-bad-500">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" disabled={busy || note.trim().length < 5}>
             {busy ? 'Saving…' : 'Resolve'}
           </Button>
+        </form>
+      )}
+
+      {!done && record.overrideRequested && !overrideMode && (
+        <div className="mt-4 rounded-lg border-2 border-warn-500 bg-warn-100 px-3 py-3">
+          <p className="font-semibold text-warn-500">An override has been requested</p>
+          <p className="mt-1 text-sm text-ink-700">
+            Approving lets this vehicle be loaded into a container the manifest did not
+            assign it to. It is recorded permanently against your name, and it counts
+            towards your yard's override rate.
+          </p>
+          <Button variant="danger" className="mt-3" onClick={() => setOverrideMode(true)}>
+            Review the override
+          </Button>
+        </div>
+      )}
+
+      {!done && overrideMode && (
+        <form
+          className="mt-4 space-y-3 rounded-lg border-2 border-bad-500 bg-bad-100 p-3"
+          onSubmit={(e) => { e.preventDefault(); onOverride(overrideReason, note) }}
+        >
+          <p className="font-semibold text-bad-500">Authorise this movement</p>
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-ink-700">Reason</span>
+            <select
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              className="w-full rounded-lg border-2 border-line/40 px-3 py-2.5 text-base"
+            >
+              {OVERRIDE_REASONS.map((r) => (
+                <option key={r.code} value={r.code}>{r.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-ink-700">
+              What did you check?
+            </span>
+            <textarea
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full rounded-lg border-2 border-line/40 px-3 py-2 text-sm"
+            />
+          </label>
+          {error && (
+            <p role="alert" className="rounded-lg bg-white px-3 py-2 text-sm text-bad-500">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button variant="danger" type="submit" disabled={busy || note.trim().length < 10}>
+              {busy ? 'Approving…' : 'Approve the override'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setOverrideMode(false)}>
+              Cancel
+            </Button>
+          </div>
         </form>
       )}
     </Card>

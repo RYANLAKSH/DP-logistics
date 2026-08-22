@@ -58,7 +58,7 @@ export function ExceptionReportPage() {
       subtitle="Your manager will pick this up"
       back={`/driver/pickup/${assignmentId}`}
     >
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={onSubmit} className="flex flex-1 flex-col gap-3">
         <fieldset>
           <legend className="mb-2 text-sm font-bold uppercase tracking-widest text-ink-600">
             What is wrong?

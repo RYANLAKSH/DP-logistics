@@ -9,6 +9,7 @@
  */
 import { chromium } from 'playwright'
 import { mkdirSync } from 'node:fs'
+import { cameraStubScript } from './camera-stub.mjs'
 
 const OUT = process.argv[2] ?? 'e2e-shots'
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:4173'
@@ -17,21 +18,15 @@ mkdirSync(OUT, { recursive: true })
 // Honour a preinstalled browser when the Playwright build differs from the
 // one on disk; fall back to Playwright's own resolution otherwise.
 const executablePath = process.env.CHROMIUM_PATH
-const browser = await chromium.launch({
-  ...(executablePath ? { executablePath } : {}),
-  // A synthetic camera, so the real getUserMedia path is exercised rather than
-  // stubbed. It shows a test pattern, so OCR reads nothing — which puts this
-  // run through the manual-entry path, the one that has to work when a plate
-  // is unreadable.
-  args: [
-    '--use-fake-ui-for-media-stream',
-    '--use-fake-device-for-media-capture',
-  ],
-})
+const browser = await chromium.launch(executablePath ? { executablePath } : {})
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
   permissions: ['camera'],
 })
+// This Chromium exposes no capture device and its fake-device flag has no
+// effect, so the stream comes from a canvas. Everything downstream — openCamera,
+// captureFrame, the preprocessing and the real engine — runs unchanged.
+await ctx.addInitScript(cameraStubScript('CULVNSA2601795'))
 const page = await ctx.newPage()
 const errors = []
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
@@ -59,8 +54,11 @@ await shot('02-pickup-detail')
 async function scan(which, value) {
   await page.click(`text=Scan ${which}`)
   await page.waitForSelector(`text=Expected ${which} number`)
+  await page.waitForSelector('button:has-text("Capture"):not([disabled])', { timeout: 30000 })
   await page.click('button:has-text("Capture")')
-  await page.waitForSelector('text=Could not read it, text=Detected', { timeout: 60000 })
+  // Regex form: comma-separated text engines are parsed as one selector, not
+  // as alternatives, so the obvious spelling silently never matches.
+  await page.waitForSelector('text=/Detected|Could not read it/', { timeout: 120000 })
   await page.click('button:has-text("Type it instead")')
   await page.fill('input[autocapitalize=characters]', value)
   await page.click('button:has-text("Use this value")')

@@ -30,6 +30,9 @@ export function VerificationResultPage() {
   const [result, setResult] = useState<VerificationResult | null>(null)
   const [submitting, setSubmitting] = useState(true)
   const [confirming, setConfirming] = useState(false)
+  const [overrideNote, setOverrideNote] = useState('')
+  const [overrideAsked, setOverrideAsked] = useState(false)
+  const [overrideSent, setOverrideSent] = useState(false)
 
   const { data: assignment } = useQuery({
     queryKey: ['assignment', assignmentId],
@@ -101,6 +104,25 @@ export function VerificationResultPage() {
     }
   }
 
+  /**
+   * Request an override.
+   *
+   * The driver asks; they cannot grant. Approval happens in the manager's own
+   * authenticated session, on the manager's own device — not by a code read
+   * over the radio, which would reduce dual control to "the manager told me
+   * the number once".
+   */
+  async function askForOverride() {
+    if (!result?.exceptionId) return
+    setConfirming(true)
+    try {
+      await data.requestOverride(result.exceptionId, overrideNote)
+      setOverrideSent(true)
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   if (submitting || !result) {
     return (
       <DriverShell title="Verifying" subtitle="Checking against the manifest">
@@ -117,7 +139,7 @@ export function VerificationResultPage() {
       title={passed ? (awaitingConfirmation ? 'Verified' : 'Moved') : 'Blocked'}
       subtitle={assignment?.containerNo}
     >
-      <div className="space-y-4">
+      <div className="flex flex-1 flex-col gap-4">
         <div
           className={`rounded-card px-5 py-8 text-center ${
             passed ? 'bg-ok-500 text-white' : 'bg-bad-500 text-white'
@@ -199,6 +221,41 @@ export function VerificationResultPage() {
               <p className="text-sm font-medium text-ink-700">
                 Your manager has been notified. This movement cannot be completed.
               </p>
+
+              {overrideSent ? (
+                <p className="rounded-lg bg-info-100 px-3 py-3 text-sm text-ink-900">
+                  Sent. Your manager will review the photographs and decide. Wait here —
+                  do not load the vehicle.
+                </p>
+              ) : overrideAsked ? (
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-ink-700">
+                      Why should this be allowed?
+                    </span>
+                    <textarea
+                      rows={3}
+                      value={overrideNote}
+                      onChange={(e) => setOverrideNote(e.target.value)}
+                      className="w-full rounded-lg border-2 border-line/40 px-3 py-2 text-base"
+                    />
+                  </label>
+                  <p className="text-xs text-ink-600">
+                    Only a manager can approve this, from their own device. You cannot
+                    approve it yourself.
+                  </p>
+                  <Button
+                    disabled={confirming || overrideNote.trim().length < 10}
+                    onClick={() => void askForOverride()}
+                  >
+                    {confirming ? 'Sending…' : 'Send the request'}
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="secondary" onClick={() => setOverrideAsked(true)}>
+                  Ask a manager to authorise this
+                </Button>
+              )}
             </div>
           </Card>
         )}

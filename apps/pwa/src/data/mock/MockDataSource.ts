@@ -416,16 +416,100 @@ export class MockDataSource implements DataSource {
     )
   }
 
+  private mustFindException(id: string): ExceptionRecord {
+    const found = this.exceptions.find((x) => x.id === id)
+    if (!found) throw new Error('exception not found')
+    return found
+  }
+
+  async acknowledgeException(id: string): Promise<ExceptionRecord> {
+    const found = this.mustFindException(id)
+    if (found.status !== 'OPEN') throw new Error(`this exception is ${found.status}`)
+    found.status = 'UNDER_REVIEW'
+    found.acknowledgedAt = new Date().toISOString()
+    return delay(snapshot(found))
+  }
+
   async resolveException(
     id: string, resolution: string, note: string,
   ): Promise<ExceptionRecord> {
-    const found = this.exceptions.find((x) => x.id === id)
-    if (!found) throw new Error('exception not found')
+    const found = this.mustFindException(id)
+    if (found.status === 'RESOLVED' || found.status === 'CANCELLED') {
+      throw new Error(`this exception is already ${found.status}`)
+    }
+    if (resolution === 'OVERRIDE_APPROVED') {
+      throw new Error('use the override approval to authorise a movement')
+    }
+    if (note.trim().length < 5) throw new Error('a resolution needs a note')
+
     found.status = 'RESOLVED'
     found.resolution = resolution
     found.resolutionNote = note
     found.resolvedAt = new Date().toISOString()
-    return delay({ ...found })
+
+    // Releasing the task is an explicit consequence of certain resolutions.
+    if (found.assignmentId && ['CORRECTED_AND_RESCANNED', 'MANUAL_ENTRY_AUTHORISED',
+        'FALSE_ALARM', 'NO_ACTION_REQUIRED'].includes(resolution)) {
+      const a = this.assignments.find((x) => x.id === found.assignmentId)
+      if (a && a.status === 'EXCEPTION') a.status = 'PENDING'
+    }
+    if (found.assignmentId && resolution === 'VEHICLE_RESCHEDULED') {
+      const a = this.assignments.find((x) => x.id === found.assignmentId)
+      if (a && a.status !== 'COMPLETED') a.status = 'CANCELLED'
+    }
+    return delay(snapshot(found))
+  }
+
+  async cancelException(id: string, note: string): Promise<ExceptionRecord> {
+    const found = this.mustFindException(id)
+    if (note.trim().length < 5) throw new Error('say why it is being cancelled')
+    found.status = 'CANCELLED'
+    found.resolutionNote = note
+    found.resolvedAt = new Date().toISOString()
+    return delay(snapshot(found))
+  }
+
+  async requestOverride(exceptionId: string, note: string): Promise<ExceptionRecord> {
+    const found = this.mustFindException(exceptionId)
+    found.overrideRequested = true
+    found.description = `${found.description ?? ''}\nDriver: ${note}`.trim()
+    return delay(snapshot(found))
+  }
+
+  async approveOverride(
+    exceptionId: string, reason: string, note: string,
+  ): Promise<{ movementId: string }> {
+    const found = this.mustFindException(exceptionId)
+    if (found.raisedBy === this.profile?.id) {
+      throw new Error('you cannot approve an override you requested yourself')
+    }
+    const a = this.assignments.find((x) => x.id === found.assignmentId)
+    if (!a) throw new Error('this exception is not attached to an assignment')
+
+    a.status = 'COMPLETED'
+    const filled = a.containerFilled + 1
+    for (const sibling of this.assignments) {
+      if (sibling.containerId === a.containerId) sibling.containerFilled = filled
+    }
+
+    const movement: MovementEvent = {
+      id: `mv-${Math.random().toString(36).slice(2, 8)}`,
+      assignmentId: a.id,
+      yardId: a.yardId,
+      containerNo: a.containerNo,
+      chassisNo: a.chassisNo,
+      driverId: found.raisedBy,
+      driverName: found.raisedByName,
+      verifiedAt: new Date().toISOString(),
+      status: 'OVERRIDDEN',
+    }
+    this.movements = [movement, ...this.movements]
+
+    found.status = 'RESOLVED'
+    found.resolution = 'OVERRIDE_APPROVED'
+    found.resolutionNote = `${reason}: ${note}`
+    found.resolvedAt = new Date().toISOString()
+    return delay({ movementId: movement.id })
   }
 
   async listUsers(): Promise<Profile[]> {

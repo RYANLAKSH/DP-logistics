@@ -157,6 +157,8 @@ export interface ExceptionRecord {
   resolvedAt?: string
   resolution?: string
   resolutionNote?: string
+  overrideRequested?: boolean
+  acknowledgedAt?: string
 }
 
 export interface DashboardCounters {

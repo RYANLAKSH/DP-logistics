@@ -34,16 +34,28 @@ export function DriverShell({
           {action}
         </div>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-5 pb-28">{children}</main>
+      <main className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-2xl flex-col
+                       px-4 py-5">
+        {children}
+      </main>
     </div>
   )
 }
 
-/** Sticky footer for the primary action, so it is always under the thumb. */
+/**
+ * The primary action, always under the thumb.
+ *
+ * Sticky rather than fixed, and rendered at the end of the content flow. A
+ * fixed bar sits outside layout and silently covers whatever is beneath it —
+ * which on the blocked-movement screen hid the button for requesting a
+ * manager's authorisation entirely. Sticky occupies real space, so it can
+ * never overlap content however many buttons it grows to.
+ */
 export function ActionBar({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line/20 bg-white/95
-                    px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+    <div className="sticky bottom-0 z-20 mt-auto -mx-4 border-t border-line/20
+                    bg-white/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]
+                    pt-3 backdrop-blur">
       <div className="mx-auto flex max-w-2xl flex-col gap-2">{children}</div>
     </div>
   )

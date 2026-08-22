@@ -57,7 +57,7 @@ export function PickupDetailPage() {
       )}
 
       {assignment && !outOfTurn && (
-        <div className="space-y-4">
+        <div className="flex flex-1 flex-col gap-4">
           <Card className="border-2 border-ink-900">
             <div className="mb-4 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-widest text-ink-600">

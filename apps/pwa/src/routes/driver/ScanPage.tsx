@@ -8,7 +8,9 @@ import { ActionBar, DriverShell } from '@/components/Layout'
 import { ErrorState } from '@/components/States'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
-import { openCamera, captureFrame, CameraError, type CameraHandle } from '@/lib/camera'
+import {
+  openCamera, captureFrame, waitForFrame, CameraError, type CameraHandle,
+} from '@/lib/camera'
 import { useOcr } from '@/lib/ocr/provider'
 import { runScan, sourceFor, type ScanOutcome } from '@/lib/ocr/pipeline'
 import { normalize } from '@/lib/ocr/normalize'
@@ -88,6 +90,15 @@ export function ScanPage({ kind }: { kind: Kind }) {
     setBusy(true)
     setSaveError(null)
     try {
+      // getUserMedia resolving means the track exists, not that a frame has
+      // been decoded. Capturing before then yields a zero-sized canvas.
+      const hasFrame = await waitForFrame(videoRef.current)
+      if (!hasFrame) {
+        throw new CameraError(
+          'The camera has not produced a picture yet. Wait a moment and try again.',
+          'unavailable',
+        )
+      }
       const shot = await captureFrame(videoRef.current, { roi: ROI })
       const result = await runScan(ocr, shot.ocrInput, { kind, expected, others })
       setOutcome(result)
@@ -96,6 +107,12 @@ export function ScanPage({ kind }: { kind: Kind }) {
         if (old) URL.revokeObjectURL(old)
         return URL.createObjectURL(shot.evidence)
       })
+    } catch (e) {
+      // A capture that throws must never leave the driver looking at a dead
+      // button with no explanation.
+      setSaveError(
+        e instanceof Error ? e.message : 'That photo could not be taken. Try again.',
+      )
     } finally {
       setBusy(false)
     }
@@ -159,7 +176,7 @@ export function ScanPage({ kind }: { kind: Kind }) {
       subtitle="Hold the plate inside the frame"
       back={`/driver/pickup/${assignmentId}`}
     >
-      <div className="space-y-4">
+      <div className="flex flex-1 flex-col gap-4">
         <div className="relative aspect-4/3 overflow-hidden rounded-card bg-ink-950">
           {previewUrl ? (
             <img src={previewUrl} alt="The photo just taken" className="h-full w-full object-cover" />
@@ -215,6 +232,15 @@ export function ScanPage({ kind }: { kind: Kind }) {
         <Card>
           <CodeValue label={`Expected ${label}`} value={expected ?? ''} />
         </Card>
+
+        {saveError && !outcome && (
+          <Card className="border-2 border-bad-500 bg-bad-100">
+            <p role="alert" className="font-semibold text-bad-500">{saveError}</p>
+            <Button className="mt-3" variant="secondary" onClick={() => void capture()}>
+              Try again
+            </Button>
+          </Card>
+        )}
 
         {outcome && (
           <Card

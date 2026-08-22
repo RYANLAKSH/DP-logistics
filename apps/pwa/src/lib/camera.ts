@@ -119,7 +119,14 @@ export function captureFrame(
   const { roi, maxEdge = 1600, quality = 0.85 } = options
   const w = video.videoWidth
   const h = video.videoHeight
-  if (!w || !h) return Promise.reject(new Error('the camera has not started yet'))
+  if (!w || !h) {
+    return Promise.reject(
+      new CameraError(
+        'The camera has not produced a frame yet. Wait a moment and try again.',
+        'unavailable',
+      ),
+    )
+  }
 
   const full = document.createElement('canvas')
   const scale = Math.min(1, maxEdge / Math.max(w, h))
@@ -129,8 +136,8 @@ export function captureFrame(
 
   const region = roi ?? { x: 0.05, y: 0.35, width: 0.9, height: 0.3 }
   const crop = document.createElement('canvas')
-  crop.width = Math.round(w * region.width)
-  crop.height = Math.round(h * region.height)
+  crop.width = Math.max(1, Math.round(w * region.width))
+  crop.height = Math.max(1, Math.round(h * region.height))
   crop.getContext('2d')!.drawImage(
     video,
     Math.round(w * region.x), Math.round(h * region.y),
@@ -158,6 +165,9 @@ export function captureFrame(
  * measurable difference; anything heavier belongs in a worker.
  */
 export function preprocess(canvas: HTMLCanvasElement): void {
+  // A zero-sized canvas makes getImageData throw, and the caller is left with
+  // a frozen button and no idea why.
+  if (canvas.width < 1 || canvas.height < 1) return
   const ctx = canvas.getContext('2d')!
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const data = image.data
@@ -178,4 +188,25 @@ export function preprocess(canvas: HTMLCanvasElement): void {
     data[i] = data[i + 1] = data[i + 2] = stretched
   }
   ctx.putImageData(image, 0, 0)
+}
+
+/**
+ * Waits until the element actually has a decoded frame.
+ *
+ * `getUserMedia` resolving means the track exists, not that a frame has been
+ * decoded — videoWidth stays 0 until then. Capturing in that window produces a
+ * zero-sized canvas and an opaque DOM error, which is exactly what happened
+ * the first time this ran under a synthetic camera.
+ */
+export function waitForFrame(video: HTMLVideoElement, timeoutMs = 5000): Promise<boolean> {
+  if (video.videoWidth > 0 && video.videoHeight > 0) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const started = Date.now()
+    const tick = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) return resolve(true)
+      if (Date.now() - started > timeoutMs) return resolve(false)
+      requestAnimationFrame(tick)
+    }
+    tick()
+  })
 }
