@@ -14,6 +14,7 @@ import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationOutcome,
   VerificationResult, Yard, YardBoard, MovementEvidence, EvidenceAttempt,
+  AuditFilter, ManifestCorrection,
 } from '../types'
 import type { ConnectionState } from '@/lib/realtime'
 import {
@@ -589,7 +590,26 @@ export class MockDataSource implements DataSource {
     return delay(snapshot(USERS))
   }
 
-  async listAuditEntries(): Promise<AuditEntry[]> {
-    return delay(snapshot(AUDIT))
+  async listAuditEntries(filter: AuditFilter = {}): Promise<AuditEntry[]> {
+    const needle = filter.search?.trim().toLowerCase()
+    return delay(snapshot(AUDIT.filter((e) => {
+      if (filter.action && e.action !== filter.action) return false
+      if (filter.from && e.occurredAt < filter.from) return false
+      if (filter.to && e.occurredAt > `${filter.to}T23:59:59.999Z`) return false
+      if (!needle) return true
+      return e.action.toLowerCase().includes(needle)
+        || e.actorName.toLowerCase().includes(needle)
+        || JSON.stringify(e.detail ?? {}).toLowerCase().includes(needle)
+    })))
+  }
+
+  async listCorrections(): Promise<ManifestCorrection[]> {
+    return delay([])
+  }
+
+  async correctAssignment(): Promise<{
+    correctionId: string; version: number; affectedMovements: unknown[]
+  }> {
+    throw new Error('Manifest corrections need the Supabase backend')
   }
 }

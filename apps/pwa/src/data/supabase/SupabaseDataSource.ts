@@ -13,7 +13,7 @@ import type {
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
-  YardBoard, MovementEvidence, EvidenceAttempt,
+  YardBoard, MovementEvidence, EvidenceAttempt, AuditFilter, ManifestCorrection,
 } from '../types'
 import type { ConnectionState } from '@/lib/realtime'
 import { pickNextAssignment } from '../nextAssignment'
@@ -47,6 +47,10 @@ export class SupabaseDataSource implements DataSource {
     const { error } = await this.db.auth.signInWithPassword({ email, password })
     if (error) throw new Error(error.message)
     const profile = await this.currentProfile()
+    if (profile) {
+      // Best effort: a failure to log the sign-in must not block the sign-in.
+      void this.recordSignIn().catch(() => {})
+    }
     if (!profile) {
       // Authenticated but with no active profile: an identity without any
       // authorisation. Do not leave a half-signed-in session lying around.
@@ -565,15 +569,28 @@ export class SupabaseDataSource implements DataSource {
     }))
   }
 
-  async listAuditEntries(): Promise<AuditEntry[]> {
-    const rows = unwrap(
-      await this.db
-        .from('audit_logs')
-        .select('*')
-        .order('occurred_at', { ascending: false })
-        .limit(200),
-    )
-    return (rows as AuditRow[]).map((r) => ({
+  async listAuditEntries(filter: AuditFilter = {}): Promise<AuditEntry[]> {
+    let query = this.db
+      .from('audit_logs')
+      .select('*')
+      .order('occurred_at', { ascending: false })
+      .limit(filter.limit ?? 200)
+
+    // Filtering server-side matters here: the audit log is the table that grows
+    // without bound, and fetching a year of it to filter in the browser is how
+    // the screen becomes unusable exactly when someone needs it.
+    if (filter.action) query = query.eq('action', filter.action)
+    if (filter.from) query = query.gte('occurred_at', filter.from)
+    if (filter.to) query = query.lte('occurred_at', `${filter.to}T23:59:59.999Z`)
+
+    const rows = unwrap(await query)
+    const needle = filter.search?.trim().toLowerCase()
+    return (rows as AuditRow[])
+      .filter((r) => !needle
+        || r.action.toLowerCase().includes(needle)
+        || r.entity_type.toLowerCase().includes(needle)
+        || JSON.stringify(r.after_value ?? {}).toLowerCase().includes(needle))
+      .map((r) => ({
       id: String(r.id),
       occurredAt: r.occurred_at,
       actorName: r.actor_id ?? 'system',
@@ -583,6 +600,54 @@ export class SupabaseDataSource implements DataSource {
       entityId: r.entity_id ?? undefined,
       detail: (r.after_value ?? undefined) as Record<string, unknown> | undefined,
     }))
+  }
+
+  async listCorrections(): Promise<ManifestCorrection[]> {
+    const rows = unwrap(
+      await this.db
+        .from('manifest_corrections')
+        .select('*')
+        .order('corrected_at', { ascending: false })
+        .limit(100),
+    ) as CorrectionRow[]
+    return rows.map((r) => ({
+      id: r.id,
+      fieldName: r.field_name,
+      beforeValue: r.before_value ?? undefined,
+      afterValue: r.after_value ?? undefined,
+      reason: r.reason,
+      containerNo: r.container_no ?? undefined,
+      chassisNo: r.chassis_no ?? undefined,
+      correctedAt: r.corrected_at,
+      affectedMovementCount: Array.isArray(r.affected_movements)
+        ? r.affected_movements.length : 0,
+    }))
+  }
+
+  async correctAssignment(input: {
+    assignmentId: string
+    field: 'chassis_no' | 'container_no' | 'sequence_no'
+    newValue: string
+    reason: string
+  }): Promise<{ correctionId: string; version: number; affectedMovements: unknown[] }> {
+    const data = unwrap(await this.db.rpc('correct_manifest_assignment', {
+      p_assignment_id: input.assignmentId,
+      p_field: input.field,
+      p_new_value: input.newValue,
+      p_reason: input.reason,
+    })) as { correction_id: string; version: number; affected_movements: unknown[] }
+    return {
+      correctionId: data.correction_id,
+      version: data.version,
+      affectedMovements: data.affected_movements ?? [],
+    }
+  }
+
+  /** Sign-in is issued by GoTrue, so the client reports it for the audit log. */
+  async recordSignIn(): Promise<void> {
+    await this.db.rpc('record_sign_in', {
+      p_context: { userAgent: navigator.userAgent, appVersion: __APP_VERSION__ },
+    })
   }
 }
 
@@ -738,6 +803,18 @@ function toException(r: ExceptionRow): ExceptionRecord {
 interface ProfileRow {
   id: string; org_id: string; role: Profile['role']
   full_name: string; employee_no: string | null
+}
+
+interface CorrectionRow {
+  id: string
+  field_name: string
+  before_value: string | null
+  after_value: string | null
+  reason: string
+  container_no: string | null
+  chassis_no: string | null
+  corrected_at: string
+  affected_movements: unknown
 }
 
 interface AuditRow {

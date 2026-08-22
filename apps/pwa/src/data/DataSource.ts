@@ -14,7 +14,7 @@
 import type {
   ActivityItem, Assignment, AuditEntry, DashboardCounters, ExceptionRecord,
   Manifest, ManifestImport, MovementEvent, Profile, VerificationResult, Yard,
-  YardBoard, MovementEvidence, EvidenceAttempt,
+  YardBoard, MovementEvidence, EvidenceAttempt, AuditFilter, ManifestCorrection,
 } from './types'
 import type { ConnectionState } from '@/lib/realtime'
 
@@ -128,5 +128,12 @@ export interface DataSource {
   getEvidenceUrl(path: string): Promise<string | null>
 
   listUsers(): Promise<Profile[]>
-  listAuditEntries(): Promise<AuditEntry[]>
+  listAuditEntries(filter?: AuditFilter): Promise<AuditEntry[]>
+  listCorrections(): Promise<ManifestCorrection[]>
+  correctAssignment(input: {
+    assignmentId: string
+    field: 'chassis_no' | 'container_no' | 'sequence_no'
+    newValue: string
+    reason: string
+  }): Promise<{ correctionId: string; version: number; affectedMovements: unknown[] }>
 }

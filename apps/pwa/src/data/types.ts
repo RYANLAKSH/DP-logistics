@@ -279,3 +279,24 @@ export interface MovementEvidence {
   }
   attempts: EvidenceAttempt[]
 }
+
+export interface AuditFilter {
+  action?: string
+  from?: string
+  to?: string
+  search?: string
+  limit?: number
+}
+
+export interface ManifestCorrection {
+  id: string
+  fieldName: string
+  beforeValue?: string
+  afterValue?: string
+  reason: string
+  containerNo?: string
+  chassisNo?: string
+  correctedAt: string
+  correctedByName?: string
+  affectedMovementCount: number
+}
