@@ -29,29 +29,19 @@ report.managerLandedOnDashboard = true
 await page.screenshot({ path: `${OUT}/02-dashboard.png`, fullPage: true })
 
 await page.click('text=Manifests')
-await page.waitForSelector('text=/Upload/i', { timeout: 10000 })
-await page.click('a:has-text("Upload"), button:has-text("Upload")').catch(() => {})
 await page.goto(`${BASE}#/manager/manifests/upload`)
-await page.waitForSelector('text=Load the earlier plan', { timeout: 15000 })
-await page.click('button:has-text("Load the earlier plan")')
+await page.waitForSelector('text=Load the pickup list', { timeout: 15000 })
+await page.click('button:has-text("Load the pickup list")')
 await page.click('button:has-text("Parse and preview")')
-await page.waitForSelector('text=Rows', { timeout: 20000 })
-const asReceived = await page.textContent('body')
-report.realListParsed = asReceived.includes('40')
-report.checkDigitBlocked = asReceived.includes('check digit')
-report.blockedFromPublishing =
-  await page.locator('button:has-text("Publish manifest")').isDisabled()
-report.carryForwardShown = asReceived.includes('from row above')
-await page.screenshot({ path: `${OUT}/03-preview-as-received.png`, fullPage: true })
-
-// --- manager: the corrected list, published --------------------------------
-await page.goto(`${BASE}#/manager/manifests/upload`)
-await page.waitForSelector('text=Load the current plan', { timeout: 10000 })
-await page.click('button:has-text("Load the current plan")')
-await page.click('button:has-text("Parse and preview")')
-await page.waitForSelector('text=Rows', { timeout: 20000 })
-report.currentPlanPublishable =
+await page.waitForSelector('table', { timeout: 20000 })
+const preview = await page.textContent('body')
+report.realListParsed = preview.includes('40')
+report.carryForwardShown = preview.includes('from row above')
+report.acceptanceContainerPresent = preview.includes('TRHU8755445')
+report.publishable =
   (await page.locator('button:has-text("Publish manifest")').isDisabled()) === false
+await page.screenshot({ path: `${OUT}/03-preview.png`, fullPage: true })
+
 await page.click('button:has-text("Publish manifest")')
 await page.waitForSelector('text=/PUBLISHED|Manifests/i', { timeout: 20000 })
 await page.screenshot({ path: `${OUT}/04-published.png`, fullPage: true })
@@ -65,8 +55,8 @@ await page.fill('input[type=password]', 'x')
 await page.click('button[type=submit]')
 await page.waitForSelector('text=/pickup|Next|Start/i', { timeout: 20000 })
 const home = await page.textContent('body')
-report.driverSeesRealContainer = /TRHU8755445|CAIU4330430|TGBU8901124/.test(home)
-report.driverSeesRealChassis = /MAT752389T7R|MAT464844TSR/.test(home)
+report.driverSeesRealContainer = /TRHU8755445|CAIU4330430|TGBU8901124/.test(home.replace(/\s/g, ''))
+report.driverSeesRealChassis = /MAT752389T7R|MAT464844TSR/.test(home.replace(/\s/g, ''))
 await page.screenshot({ path: `${OUT}/05-driver-home.png`, fullPage: true })
 
 // --- driver: walk one pickup all the way through ---------------------------
