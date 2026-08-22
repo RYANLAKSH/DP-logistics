@@ -16,6 +16,8 @@ import { runScan, sourceFor, type ScanOutcome } from '@/lib/ocr/pipeline'
 import { normalize } from '@/lib/ocr/normalize'
 import { diffPositions } from '@/lib/format'
 import { useScanDraft } from '@/lib/scanDraft'
+import { saveCapture } from '@/lib/offline/outbox'
+import { currentFix } from '@/lib/geolocation'
 
 type Kind = 'container' | 'chassis'
 
@@ -129,24 +131,40 @@ export function ScanPage({ kind }: { kind: Kind }) {
     setBusy(true)
     setSaveError(null)
     const attemptId = crypto.randomUUID()
+    const source = sourceFor(outcome, typedIn)
     try {
-      await data.recordScan({
-        attemptId,
-        assignmentId,
-        kind: kind === 'container' ? 'CONTAINER' : 'CHASSIS',
-        scannedValue: value,
-        image: pendingImage,
-        ocrTextRaw: outcome.rawText ?? undefined,
-        ocrConfidence: outcome.confidence,
-        ocrEngine: outcome.engine,
-        source: sourceFor(outcome, typedIn),
-      })
+      // Stored locally first, then sent. If the send fails — a dead spot
+      // between stacks — the photograph is already safe and the driver
+      // carries on; the outbox sends it later.
+      await saveCapture(
+        {
+          attemptId,
+          assignmentId,
+          kind: kind === 'container' ? 'CONTAINER' : 'CHASSIS',
+          blob: pendingImage,
+          scannedValue: value,
+          ocrTextRaw: outcome.rawText ?? undefined,
+          ocrConfidence: outcome.confidence,
+          ocrEngine: outcome.engine,
+          source,
+        },
+        () => data.recordScan({
+          attemptId,
+          assignmentId,
+          kind: kind === 'container' ? 'CONTAINER' : 'CHASSIS',
+          scannedValue: value,
+          image: pendingImage,
+          ocrTextRaw: outcome.rawText ?? undefined,
+          ocrConfidence: outcome.confidence,
+          ocrEngine: outcome.engine,
+          source,
+        }).then(() => undefined),
+      )
+      void currentFix()
       draft.update(
         kind === 'container'
-          ? { containerValue: value, containerSource: sourceFor(outcome, typedIn),
-              containerAttemptId: attemptId }
-          : { chassisValue: value, chassisSource: sourceFor(outcome, typedIn),
-              chassisAttemptId: attemptId },
+          ? { containerValue: value, containerSource: source, containerAttemptId: attemptId }
+          : { chassisValue: value, chassisSource: source, chassisAttemptId: attemptId },
       )
       navigate(`/driver/pickup/${assignmentId}`)
     } catch (e) {

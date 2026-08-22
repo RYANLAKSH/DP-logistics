@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { DataProvider } from '@/data/provider'
 import { OcrProviderScope } from '@/lib/ocr/provider'
+import { UpdateBanner } from '@/lib/serviceWorker'
 import { SessionProvider } from '@/lib/session'
 import { RequireAdmin, RequireAuth, RequireRole, RoleHome } from '@/routes/guards'
 import { LoginPage } from '@/routes/LoginPage'
@@ -12,6 +13,7 @@ import { ScanPage } from '@/routes/driver/ScanPage'
 import { VerificationResultPage } from '@/routes/driver/VerificationResultPage'
 import { ExceptionReportPage } from '@/routes/driver/ExceptionReportPage'
 import { CompletedJobsPage } from '@/routes/driver/CompletedJobsPage'
+import { SyncPage } from '@/routes/driver/SyncPage'
 import { DashboardPage } from '@/routes/manager/DashboardPage'
 import { ManifestUploadPage } from '@/routes/manager/ManifestUploadPage'
 import { ManifestPreviewPage } from '@/routes/manager/ManifestPreviewPage'
@@ -47,6 +49,7 @@ export function AppRoutes() {
         <Route element={<RequireRole allow={['DRIVER']} />}>
           <Route path="/driver" element={<DriverHomePage />} />
           <Route path="/driver/completed" element={<CompletedJobsPage />} />
+          <Route path="/driver/sync" element={<SyncPage />} />
           <Route path="/driver/pickup/:assignmentId" element={<PickupDetailPage />} />
           <Route
             path="/driver/pickup/:assignmentId/scan/container"
@@ -98,6 +101,7 @@ export function App() {
         <OcrProviderScope>
           <BrowserRouter>
             <SessionProvider>
+              <UpdateBanner />
               <AppRoutes />
             </SessionProvider>
           </BrowserRouter>

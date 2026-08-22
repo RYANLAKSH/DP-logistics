@@ -12,6 +12,9 @@ import type { VerificationResult } from '@/data/types'
 import { diffPositions } from '@/lib/format'
 import { OUTCOME_MESSAGE } from '@/lib/status'
 import { clearScanDraft, useScanDraft } from '@/lib/scanDraft'
+import { capturesFor, enqueue } from '@/lib/offline/outbox'
+import { connectivity } from '@/lib/offline/connectivity'
+import { currentFix } from '@/lib/geolocation'
 
 /**
  * The verdict.
@@ -83,6 +86,43 @@ export function VerificationResultPage() {
     if (!draft.containerValue || !draft.chassisValue) return
     setConfirming(true)
     try {
+      const captures = await capturesFor(assignmentId)
+      const allUploaded = captures.length >= 2 && captures.every((c) => c.uploaded)
+
+      // Offline, or evidence still on the phone: queue it. Do NOT report a
+      // completion the server has not made. A green tick here would train
+      // drivers to trust a screen that can be wrong, which is worse than
+      // having no app at all.
+      if (connectivity() === 'offline' || !allUploaded) {
+        await enqueue({
+          id: draft.movementId,
+          assignmentId,
+          containerNo: result?.expectedContainerNo ?? draft.containerValue,
+          chassisNo: result?.expectedChassisNo ?? draft.chassisValue,
+          scannedContainerNo: draft.containerValue,
+          scannedChassisNo: draft.chassisValue,
+          images: captures.map((c) => ({
+            kind: c.kind,
+            blob: c.blob,
+            attemptId: c.attemptId,
+            scannedValue: c.scannedValue,
+            ocrTextRaw: c.ocrTextRaw,
+            ocrConfidence: c.ocrConfidence,
+            ocrEngine: c.ocrEngine,
+            source: c.source,
+            uploaded: c.uploaded,
+          })),
+          gps: await currentFix(),
+        })
+        setResult({
+          ...result!,
+          status: 'PENDING_SYNC',
+        })
+        clearScanDraft(assignmentId)
+        queryClient.removeQueries({ queryKey: ['driver'] })
+        return
+      }
+
       const r = await data.verifyMovement({
         assignmentId,
         scannedContainerNo: draft.containerValue,
@@ -133,28 +173,39 @@ export function VerificationResultPage() {
 
   const passed = result.outcome === 'MATCH'
   const awaitingConfirmation = result.status === 'READY_TO_CONFIRM'
+  const queued = result.status === 'PENDING_SYNC'
 
   return (
     <DriverShell
-      title={passed ? (awaitingConfirmation ? 'Verified' : 'Moved') : 'Blocked'}
+      title={
+        queued ? 'Saved on this phone'
+        : passed ? (awaitingConfirmation ? 'Verified' : 'Moved')
+        : 'Blocked'
+      }
       subtitle={assignment?.containerNo}
     >
       <div className="flex flex-1 flex-col gap-4">
         <div
           className={`rounded-card px-5 py-8 text-center ${
-            passed ? 'bg-ok-500 text-white' : 'bg-bad-500 text-white'
+            queued ? 'bg-warn-500 text-white'
+            : passed ? 'bg-ok-500 text-white'
+            : 'bg-bad-500 text-white'
           }`}
           role="status"
           aria-live="assertive"
         >
-          <p className="text-6xl leading-none" aria-hidden="true">{passed ? '✓' : '✕'}</p>
+          <p className="text-6xl leading-none" aria-hidden="true">
+            {queued ? '↻' : passed ? '✓' : '✕'}
+          </p>
           <p className="mt-3 text-hero font-bold tracking-tight">
-            {passed ? 'VERIFIED' : 'DO NOT LOAD'}
+            {queued ? 'PENDING SYNC' : passed ? 'VERIFIED' : 'DO NOT LOAD'}
           </p>
           <p className="mx-auto mt-2 max-w-sm text-white/90">
-            {awaitingConfirmation
-              ? 'Both values match the manifest. Load the vehicle, then confirm.'
-              : OUTCOME_MESSAGE[result.outcome] ?? result.outcome}
+            {queued
+              ? 'Saved on this phone. This movement is NOT complete until the server confirms it — check Sync before you finish your shift.'
+              : awaitingConfirmation
+                ? 'Both values match the manifest. Load the vehicle, then confirm.'
+                : OUTCOME_MESSAGE[result.outcome] ?? result.outcome}
           </p>
         </div>
 
@@ -261,7 +312,14 @@ export function VerificationResultPage() {
         )}
 
         <ActionBar>
-          {passed && awaitingConfirmation ? (
+          {queued ? (
+            <>
+              <Link to="/driver"><Button hero>Next pickup</Button></Link>
+              <Link to="/driver/sync">
+                <Button variant="secondary" className="w-full">See what is pending</Button>
+              </Link>
+            </>
+          ) : passed && awaitingConfirmation ? (
             <>
               <Button hero onClick={() => void confirmMoved()} disabled={confirming}>
                 {confirming ? 'Recording…' : 'Confirm vehicle moved'}

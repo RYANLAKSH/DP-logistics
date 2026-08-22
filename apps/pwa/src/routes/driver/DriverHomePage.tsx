@@ -11,11 +11,22 @@ import { useData } from '@/data/provider'
 import { dateLong } from '@/lib/format'
 import { pickNextAssignment } from '@/data/nextAssignment'
 import { useSession, useSignOut } from '@/lib/session'
+import { SyncIndicator } from '@/components/SyncIndicator'
+import { useOcr } from '@/lib/ocr/provider'
+import { useEffect } from 'react'
 
 export function DriverHomePage() {
   const data = useData()
   const { profile } = useSession()
   const signOut = useSignOut()
+  const ocr = useOcr()
+
+  // Download and start the OCR engine at shift start, while there is still
+  // signal. Waiting until the first shutter means the first scan of the day
+  // happens in whatever connectivity the driver has at that moment — which,
+  // between two stacks of containers, is often none.
+  useEffect(() => { void ocr.initialize().catch(() => {}) }, [ocr])
+
   const { data: assignments, isLoading, error, refetch } = useQuery({
     queryKey: ['driver', 'assignments'],
     queryFn: () => data.listMyAssignments(),
@@ -34,9 +45,12 @@ export function DriverHomePage() {
       title={`Today · ${dateLong(new Date().toISOString())}`}
       subtitle={profile ? `${profile.fullName} · Nhava Sheva` : undefined}
       action={
-        <button onClick={signOut} className="text-sm text-paper/70 underline">
-          Sign out
-        </button>
+        <div className="flex items-center gap-3">
+          <SyncIndicator />
+          <button onClick={signOut} className="text-sm text-paper/70 underline">
+            Sign out
+          </button>
+        </div>
       }
     >
       {isLoading && <Spinner label="Loading your assignments" />}
