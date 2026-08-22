@@ -7,7 +7,7 @@
  * service worker — do not break anywhere else.
  */
 import { chromium } from 'playwright'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -58,12 +58,28 @@ report.managerLandedOnDashboard = true
 await page.screenshot({ path: `${OUT}/02-dashboard.png`, fullPage: true })
 
 await page.goto(`${BASE}#/manager/manifests/upload`)
-// The real thing: the .xlsx a manager actually uploaded, through the file
-// picker, not the built-in sample.
+
+// --- the paste path, which is the one that works on a phone ----------------
+// A file picker inside an embedded page is blocked by some mobile browsers —
+// the button is tapped and nothing happens. Pasting needs no file access, so
+// it is the route that has to work, and it is tested first for that reason.
+await page.waitForSelector('text=Or paste the rows', { timeout: 15000 })
+const tsv = readFileSync(resolve(HERE, 'fixtures', 'pasted-manifest.tsv'), 'utf8')
+await page.fill('textarea', tsv)
+await page.click('button:has-text("Parse pasted rows")')
+await page.waitForURL('**/manager/manifests/import/**', { timeout: 20000 })
+await page.waitForSelector('table', { timeout: 20000 })
+const fromPaste = await rendered()
+report.pastedRowsParsed = fromPaste.includes('40') && fromPaste.includes('TRHU8755445')
+await page.screenshot({ path: `${OUT}/03a-pasted.png`, fullPage: true })
+
+// --- and the file picker, for the devices where it does work ---------------
+await page.goto(`${BASE}#/manager/manifests/upload`)
 await page.waitForSelector('text=Load the pickup list', { timeout: 15000 })
 await page.setInputFiles('input[type=file]',
   resolve(HERE, 'fixtures', 'tata-motors-pickup-list.xlsx'))
 await page.click('button:has-text("Parse and preview")')
+await page.waitForURL('**/manager/manifests/import/**', { timeout: 20000 })
 await page.waitForSelector('table', { timeout: 20000 })
 const preview = await rendered()
 report.xlsxParsed = preview.includes('40')

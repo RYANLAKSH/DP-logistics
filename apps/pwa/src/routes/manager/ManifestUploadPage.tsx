@@ -17,6 +17,7 @@ export function ManifestUploadPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pasted, setPasted] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function onPick(e: ChangeEvent<HTMLInputElement>) {
@@ -49,12 +50,12 @@ export function ManifestUploadPage() {
     setFile(picked)
   }
 
-  async function onParse() {
-    if (!file) return
+  async function onParse(source: File | null = file) {
+    if (!source) return
     setBusy(true)
     setError(null)
     try {
-      const imported = await data.parseManifestFile(file, 'yard-nsa', date)
+      const imported = await data.parseManifestFile(source, 'yard-nsa', date)
       navigate(`/manager/manifests/import/${imported.id}`)
     } catch (e) {
       // A parse failure has to say what went wrong. "Upload failed" leaves an
@@ -125,6 +126,43 @@ export function ManifestUploadPage() {
           </Button>
         </Card>
 
+        {/* The way in when there is no way in.
+            Some phone browsers refuse to open a file picker for a page shown
+            inside another page — the button is tapped and simply nothing
+            happens, with no error to act on. Pasting needs no file access at
+            all, and it is often the faster path anyway: the list arrives in an
+            email or a message, and copying the rows beats saving an
+            attachment and hunting for it in a file browser. */}
+        <Card>
+          <CardHeader
+            title="Or paste the rows"
+            subtitle="Select the sheet in Excel, copy, and paste here"
+          />
+          <p className="text-sm text-ink-600">
+            Use this if tapping the button above does nothing — some phone browsers
+            will not open a file picker inside an embedded page. Include the heading
+            row; columns separated by tabs or commas both work.
+          </p>
+          <textarea
+            value={pasted}
+            onChange={(e) => { setPasted(e.target.value); setError(null) }}
+            rows={6}
+            spellCheck={false}
+            autoCapitalize="characters"
+            placeholder={'SR\tCHASSIS NO\tMODEL\tINVOICE NO\tCONT NO\tSEAL\n1\tMAT752389T7R20588\t…\t…\tTRHU8755445\t13064'}
+            className="code mt-3 w-full rounded-lg border-2 border-line/40 p-3 text-sm
+                       focus:border-ink-900"
+          />
+          <Button
+            className="mt-3"
+            disabled={!pasted.trim() || busy}
+            onClick={() => void onParse(
+              new File([pasted], 'pasted-manifest.csv', { type: 'text/csv' }))}
+          >
+            {busy ? 'Parsing…' : 'Parse pasted rows'}
+          </Button>
+        </Card>
+
         {/* Only on fixtures. Picking a file is the one step of this flow that
             cannot be demonstrated without one, and on a phone it is the step
             people give up at. */}
@@ -135,8 +173,8 @@ export function ManifestUploadPage() {
               subtitle="TATA MOTORS CULVNSA2601795 — 20 containers, 40 vehicles"
             />
             <p className="text-sm text-ink-600">
-              The list exactly as it arrives: container number written once per pair,
-              a running SR column, no sequence column, blank rows between pairs.
+              The list exactly as it arrives: a title row above the headings, a running
+              SR column, no sequence column, and blank rows between pairs.
             </p>
             <Button
               className="mt-3"
