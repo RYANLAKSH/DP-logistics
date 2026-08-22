@@ -2,7 +2,10 @@
 -- Development seed.
 --
 -- Creates an organisation, two yards, settings and a ready-to-publish manifest
--- import carrying the build plan's worked example.
+-- import carrying the acceptance scenario, taken from the real pickup list:
+--
+--   TRHU8755445  <- MAT752389T7R20588 (slot 1), MAT464844TSR09113 (slot 2)
+--   CAIU4330430  <- MAT752389T7R18439 (slot 1), MAT464844TSR09257 (slot 2)
 --
 -- Users are NOT created here. Create them through Supabase Auth first (the
 -- dashboard, or `supabase auth admin create-user`), then insert the matching
@@ -50,10 +53,10 @@ select
   repeat('0', 64), 256, 'READY', 4, 4, 0,
   p.id,
   '[
-    {"row_no":1,"container_no":"CULVNSA2601795","chassis_no":"MAT752389T7R19810","sequence_no":1},
-    {"row_no":2,"container_no":"CULVNSA2601795","chassis_no":"MAT464844TSR09249","sequence_no":2},
-    {"row_no":3,"container_no":"CULVNSA2601796","chassis_no":"MAT111222A1B00001","sequence_no":1},
-    {"row_no":4,"container_no":"CULVNSA2601796","chassis_no":"MAT111222A1B00002","sequence_no":2}
+    {"row_no":1,"container_no":"TRHU8755445","chassis_no":"MAT752389T7R20588","sequence_no":1},
+    {"row_no":2,"container_no":"TRHU8755445","chassis_no":"MAT464844TSR09113","sequence_no":2},
+    {"row_no":3,"container_no":"CAIU4330430","chassis_no":"MAT752389T7R18439","sequence_no":1},
+    {"row_no":4,"container_no":"CAIU4330430","chassis_no":"MAT464844TSR09257","sequence_no":2}
   ]'::jsonb
 from profiles p
 where p.org_id = '00000000-0000-0000-0000-0000000000a1' and p.role in ('MANAGER','ADMIN')

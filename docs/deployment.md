@@ -40,6 +40,42 @@ because a misconfigured deploy would otherwise start and look fine.
 > that gets committed. If it leaks, rotate it immediately and treat every
 > record written since as unverified.
 
+## 1a. Capacity, at the real volume
+
+2,000 vehicles a month, which is 1,000 containers. Everything below follows
+from that and from the measured 231 KB evidence image.
+
+| | Per month | Per year | Steady state at 24-month retention |
+|---|---|---|---|
+| Photographs | 4,000 | 48,000 | — |
+| Evidence storage | 902 MB | 10.6 GB | **21 GB** |
+| Uploaded from phones | 902 MB | — | ~35 MB across the yard per working day |
+
+Note the photograph count. The container is photographed **once per vehicle**,
+not once per container, so 2,000 vehicles produce 2,000 container images rather
+than 1,000. That is deliberate: each movement's evidence has to stand on its
+own, and a container photograph shared between two movements proves the box was
+open at some point rather than that this vehicle went into it. It costs about
+230 KB a vehicle to keep the second movement's evidence as good as the first's.
+
+Rows per year, which is what the query plans have to survive:
+
+| Table | Per year |
+|---|---|
+| `audit_logs` | 120,000 |
+| `verification_attempts` | 72,000 |
+| `movement_events` | 24,000 |
+
+The RLS work in §12 was measured at 300,000 audit rows — **two and a half years
+of this yard** — so the 96 ms figure is the one that matters here, not an
+extrapolation from a toy dataset.
+
+**Plan sizing.** The Free tier's 1 GB of storage is exhausted in about five
+weeks. Pro (100 GB included) holds the full 24-month retention with room to
+spare, and is the tier that also brings point-in-time recovery, which §9 says
+this system needs. Nothing here is close to a database size or connection
+limit; storage and the daily upload are the only numbers that grow.
+
 ## 2. Supabase project setup
 
 Create **three separate projects**: local, staging, production. Never share
@@ -63,9 +99,17 @@ Per project, in the dashboard:
 
 ## 3. Database migrations
 
+`supabase/config.toml` is committed, so the local stack and the hosted project
+agree on the settings this app's security model depends on — Postgres 16, no
+self-registration, a 10 MiB storage limit, and `app` kept out of the exposed
+schemas. It does **not** configure the hosted project; §2 is still the list to
+check in the dashboard.
+
 ```bash
+supabase start                         # local stack, first time only
+supabase db reset                      # applies migrations + seed.sql locally
 supabase link --project-ref <ref>
-supabase db push            # applies supabase/migrations in order
+supabase db push                       # applies supabase/migrations in order
 ```
 
 Migrations are files, applied by CI. **Never** apply a change by hand in the
@@ -85,11 +129,16 @@ The migration creates both buckets private. Verify in the dashboard that
 neither `evidence` nor `manifests` is public — a public evidence bucket would
 expose every photograph in the system to anyone who guesses a path.
 
-Set a lifecycle rule on `evidence` matching `org_settings.evidence_retention_months`
-(default 24). Purging must run as the service role from a scheduled job; the
-`verification_attempts` row and its hash survive the image, so the record still
-shows that a photograph existed, what it hashed to, and that it was deleted by
-policy.
+Retention is enforced by `app.purge_expired_evidence()`, scheduled in §8 — not
+by a bucket lifecycle rule. A lifecycle rule would delete the object and leave
+`verification_attempts` pointing at a path that no longer exists, which reads
+in an audit as evidence that went missing rather than evidence that expired.
+The function clears the path, stamps `evidence_purged_at` and keeps both
+SHA-256 values, so the record still shows that a photograph existed, what it
+hashed to, and that policy removed it.
+
+At 2,000 vehicles a month the bucket settles at about 21 GB and stops growing,
+roughly two years after go-live.
 
 ## 5. Edge Functions
 
