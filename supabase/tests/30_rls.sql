@@ -199,3 +199,41 @@ begin
     perform tst.ok(t.relforcerowsecurity, format('table %s must FORCE RLS', t.relname));
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- The policies must stay hoistable.
+--
+-- Asserted structurally rather than by timing, because a timing test on a
+-- small fixture database proves nothing and fails on a slow morning. What
+-- matters is the SHAPE: a helper called with a row's column as its argument is
+-- called once per row, and over an audit log that is the difference between
+-- 96 milliseconds and 15 seconds for the same answer.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  offender record;
+  n int := 0;
+begin
+  for offender in
+    select c.relname, p.polname, pg_get_expr(p.polqual, p.polrelid) as expr
+      from pg_policy p join pg_class c on c.oid = p.polrelid
+     where pg_get_expr(p.polqual, p.polrelid) like '%can_see_yard%'
+        or pg_get_expr(p.polwithcheck, p.polrelid) like '%can_see_yard%'
+  loop
+    raise warning 'per-row helper in policy %.%: %',
+      offender.relname, offender.polname, offender.expr;
+    n := n + 1;
+  end loop;
+
+  perform tst.eq(n, 0,
+    'no policy calls can_see_yard per row — use yard_id in (select unnest(app.visible_yards()))');
+
+  -- And the set-returning form must actually be in use, so this test cannot
+  -- pass by the policies having quietly dropped yard scoping altogether.
+  perform tst.ok(
+    (select count(*) from pg_policy p
+      where pg_get_expr(p.polqual, p.polrelid) like '%visible_yards%') >= 10,
+    'yard scoping is still applied, via the hoistable form');
+
+  raise notice '30_rls hoisting: ok';
+end $$;

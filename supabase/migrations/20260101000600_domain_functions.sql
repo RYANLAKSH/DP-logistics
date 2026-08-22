@@ -170,6 +170,35 @@ as $$
   end
 $$;
 
+/**
+ * Every yard the current user may see, as a set.
+ *
+ * can_see_yard() above answers the same question one yard at a time, which is
+ * the right shape inside a function and the wrong shape inside a row policy:
+ * the argument is a column, so the planner cannot hoist the call and evaluates
+ * it once per row. Over an audit log with a few hundred thousand rows that was
+ * measured at fifteen seconds for a single count.
+ *
+ * Written as a set, a policy can say `yard_id in (select unnest(...))` and
+ * Postgres builds one hashed subplan for the whole statement. Same rows, same
+ * rules — the difference is entirely in how many times the question is asked.
+ */
+create or replace function app.visible_yards()
+returns uuid[]
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case
+    when auth.uid() is null then '{}'::uuid[]
+    when app.current_role() = 'ADMIN' then coalesce(
+      (select array_agg(y.id) from public.yards y where y.org_id = app.current_org()),
+      '{}'::uuid[])
+    else app.current_yards()
+  end
+$$;
+
 create or replace function app.is_admin() returns boolean
   language sql stable set search_path = '' as $$ select app.current_role() = 'ADMIN' $$;
 
@@ -189,6 +218,7 @@ grant execute on function
   app.current_org(),
   app.current_yards(),
   app.can_see_yard(uuid),
+  app.visible_yards(),
   app.is_admin(),
   app.is_manager_or_admin(),
   app.is_driver()

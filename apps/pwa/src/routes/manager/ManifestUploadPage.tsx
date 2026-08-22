@@ -4,7 +4,6 @@ import { Button } from '@/components/Button'
 import { Card, CardHeader } from '@/components/Card'
 import { ManagerShell } from '@/components/Layout'
 import { useData, useIsMockBackend } from '@/data/provider'
-import { samplePickupListFile } from '@/data/mock/samplePickupList'
 import { MANIFEST_ACCEPT, sniffManifestKind } from '@/lib/manifestFile'
 
 const MAX_BYTES = 10 * 1024 * 1024
@@ -179,7 +178,13 @@ export function ManifestUploadPage() {
             <Button
               className="mt-3"
               variant="secondary"
-              onClick={() => { setError(null); setFile(samplePickupListFile()) }}
+              // Imported on tap. The sample is the customer's whole list as a
+              // string literal, and a configured build has no use for it.
+              onClick={() => {
+                setError(null)
+                void import('@/data/mock/samplePickupList')
+                  .then((m) => setFile(m.samplePickupListFile()))
+              }}
             >
               Load the pickup list
             </Button>

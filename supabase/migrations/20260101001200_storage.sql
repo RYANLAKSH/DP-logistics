@@ -27,6 +27,10 @@ returns uuid language sql immutable set search_path = '' as $$
 $$;
 
 -- ------------------------------- evidence ----------------------------------
+-- Helper calls are hoisted the same way as in the table policies: the bucket
+-- is the largest table in the system by row count, and a per-row can_see_yard
+-- there costs the same as it did on the audit log.
+--
 -- Drivers may write only into their own organisation and their own yards, and
 -- may read back only what they created. Managers read their yards. Admins read
 -- the organisation. Nobody gets UPDATE or DELETE: evidence is immutable, and
@@ -34,9 +38,9 @@ $$;
 create policy evidence_driver_insert on storage.objects for insert to authenticated
   with check (
     bucket_id = 'evidence'
-    and app.is_driver()
-    and app.storage_org(name) = app.current_org()
-    and app.can_see_yard(app.storage_yard(name))
+    and (select app.is_driver())
+    and app.storage_org(name) = (select app.current_org())
+    and app.storage_yard(name) in (select unnest(app.visible_yards()))
   );
 
 create policy evidence_owner_read on storage.objects for select to authenticated
@@ -48,26 +52,26 @@ create policy evidence_owner_read on storage.objects for select to authenticated
 create policy evidence_manager_read on storage.objects for select to authenticated
   using (
     bucket_id = 'evidence'
-    and app.is_manager_or_admin()
-    and app.storage_org(name) = app.current_org()
-    and app.can_see_yard(app.storage_yard(name))
+    and (select app.is_manager_or_admin())
+    and app.storage_org(name) = (select app.current_org())
+    and app.storage_yard(name) in (select unnest(app.visible_yards()))
   );
 
 -- ------------------------------- manifests ---------------------------------
 create policy manifest_manager_write on storage.objects for insert to authenticated
   with check (
     bucket_id = 'manifests'
-    and app.is_manager_or_admin()
-    and app.storage_org(name) = app.current_org()
-    and app.can_see_yard(app.storage_yard(name))
+    and (select app.is_manager_or_admin())
+    and app.storage_org(name) = (select app.current_org())
+    and app.storage_yard(name) in (select unnest(app.visible_yards()))
   );
 
 create policy manifest_manager_read on storage.objects for select to authenticated
   using (
     bucket_id = 'manifests'
-    and app.is_manager_or_admin()
-    and app.storage_org(name) = app.current_org()
-    and app.can_see_yard(app.storage_yard(name))
+    and (select app.is_manager_or_admin())
+    and app.storage_org(name) = (select app.current_org())
+    and app.storage_yard(name) in (select unnest(app.visible_yards()))
   );
 
 -- ---------------------------------------------------------------------------

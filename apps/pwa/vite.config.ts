@@ -72,14 +72,28 @@ export default defineConfig({
     chunkSizeWarningLimit: 400,
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Split by change cadence: the framework moves rarely, Supabase
-          // moves on its own schedule, and the app moves every deploy. Keeping
-          // them apart means a routine release does not invalidate the two
-          // largest cached chunks on every driver's phone.
-          react: ['react', 'react-dom', 'react-router-dom'],
-          supabase: ['@supabase/supabase-js'],
-          query: ['@tanstack/react-query'],
+        /**
+         * Split by change cadence: the framework moves rarely, Supabase moves
+         * on its own schedule, and the app moves every deploy. Keeping them
+         * apart means a routine release does not invalidate the two largest
+         * cached chunks on every driver's phone.
+         *
+         * Matched by path rather than by package name. The object form keys on
+         * a package's entry module, so listing 'react-dom' never caught
+         * `react-dom/client` — which is what the app actually imports. The
+         * result was react-dom sitting in the app chunk and its scheduler in
+         * the offline chunk, so every release re-downloaded the framework and
+         * the split bought nothing it claimed to.
+         */
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(id)) {
+            return 'react'
+          }
+          if (id.includes('node_modules/@supabase/')) return 'supabase'
+          if (id.includes('node_modules/@tanstack/')) return 'query'
+          if (id.includes('node_modules/dexie')) return 'offline'
+          return
         },
       },
     },
