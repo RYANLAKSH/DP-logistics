@@ -15,7 +15,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:test": "./scripts/db-test.sh",
     "test:shared": "vitest run",
-    "db:concurrency": "./scripts/db-concurrency.sh"
+    "db:concurrency": "./scripts/db-concurrency.sh",
+    "test:all": "./scripts/test-all.sh"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

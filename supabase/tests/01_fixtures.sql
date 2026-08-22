@@ -175,3 +175,22 @@ language sql stable as $$
 $$;
 
 grant execute on all functions in schema tst to public;
+
+/**
+ * Date-scoped assignment lookup.
+ *
+ * The acceptance suite uses the business's real identifiers, which also appear
+ * in the earlier fixtures — so looking one up by chassis alone is ambiguous
+ * across published manifests for different days.
+ */
+create or replace function tst.assignment_on(p_date date, p_chassis text) returns uuid
+language sql stable as $$
+  select va.id from vehicle_assignments va
+    join manifests m on m.id = va.manifest_id
+   where va.chassis_no = p_chassis
+     and m.status = 'PUBLISHED'
+     and m.operating_date = p_date
+   limit 1
+$$;
+
+grant execute on all functions in schema tst to public;
