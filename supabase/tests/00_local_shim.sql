@@ -76,4 +76,11 @@ create or replace function storage.foldername(name text) returns text[]
   select string_to_array(name, '/')
 $$;
 
+-- Supabase ships storage.objects with RLS on. Without this the storage
+-- policies parse, apply to nothing, and a test that "passes" proves only that
+-- the SQL is syntactically valid — which is the most dangerous kind of green.
+alter table storage.objects enable row level security;
+grant select, insert, update, delete on storage.objects to authenticated;
+grant select on storage.buckets to authenticated;
+
 grant usage on schema storage to anon, authenticated, service_role;
