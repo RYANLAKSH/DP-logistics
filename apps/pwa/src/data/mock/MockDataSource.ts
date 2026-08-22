@@ -20,6 +20,7 @@ import type { ConnectionState } from '@/lib/realtime'
 import {
   detectColumns, findHeaderRow, isUsableMapping, parseDelimited, validateRows,
 } from '@shared/manifest/index.ts'
+import { isXlsx, readWorkbook } from '@/lib/xlsx/read'
 import {
   ACTIVITY, ASSIGNMENTS, AUDIT, EXCEPTIONS, MANIFESTS, MOVEMENTS,
   SAMPLE_IMPORT, USERS, YARDS,
@@ -394,14 +395,36 @@ export class MockDataSource implements DataSource {
   async parseManifestFile(
     file: File, yardId: string, date: string,
   ): Promise<ManifestImport> {
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      // Spreadsheet decoding lives in the Edge Function. Falling back to the
-      // fixture keeps the demo usable without pretending to parse XLSX here.
-      return delay({ ...SAMPLE_IMPORT, fileName: file.name, yardId, operatingDate: date })
+    // Both formats end up as the same string[][], so header detection,
+    // validation and the container carry-forward are one implementation
+    // whichever way the manifest arrived.
+    //
+    // This used to return the sample import for anything that was not a CSV,
+    // keeping the uploaded file's name. The screen then showed fabricated
+    // validation results attributed to the manager's own file — which is
+    // precisely the failure the rest of this product exists to prevent.
+    let grid: string[][]
+    let sheetName: string | undefined
+
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      grid = parseDelimited(await file.text())
+    } else if (isXlsx(file.name)) {
+      const sheets = await readWorkbook(file)
+      if (sheets.length === 0) throw new Error('That workbook has no sheets in it.')
+      // A workbook with several sheets is usually several versions of one
+      // plan. Take the first that yields a usable table and say which, rather
+      // than merging them — merged versions put one chassis in two containers.
+      const usable = sheets.find(
+        (sh) => isUsableMapping(detectColumns(sh.rows[findHeaderRow(sh.rows)] ?? [])),
+      )
+      grid = (usable ?? sheets[0]!).rows
+      sheetName = (usable ?? sheets[0]!).name
+    } else {
+      throw new Error(
+        `Cannot read "${file.name}". Upload a .csv or a .xlsx — an older .xls has to be saved as one of those first.`,
+      )
     }
 
-    const text = await file.text()
-    const grid = parseDelimited(text)
     const headerRow = findHeaderRow(grid)
     const map = headerRow >= 0 ? detectColumns(grid[headerRow]!) : {}
 
@@ -419,7 +442,7 @@ export class MockDataSource implements DataSource {
       id: `imp-${Math.random().toString(36).slice(2, 10)}`,
       yardId,
       operatingDate: date,
-      fileName: file.name,
+      fileName: sheetName ? `${file.name} · sheet "${sheetName}"` : file.name,
       rowCount: result.rowCount,
       validCount: result.validCount,
       rejectedCount: result.rejectedCount,

@@ -2,6 +2,10 @@ import { chromium } from 'playwright'
 const BASE = 'http://localhost:4180/'
 const OUT = process.argv[2] ?? '/tmp/claude-0/-home-user-DP-logistics/90b26267-c79d-5c8b-b70f-3b50c632d8fd/scratchpad/demo-shots'
 import { mkdirSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
 mkdirSync(OUT, { recursive: true })
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' })
@@ -30,12 +34,16 @@ await page.screenshot({ path: `${OUT}/02-dashboard.png`, fullPage: true })
 
 await page.click('text=Manifests')
 await page.goto(`${BASE}#/manager/manifests/upload`)
+// The real thing: the .xlsx a manager actually uploaded, through the file
+// picker, not the built-in sample.
 await page.waitForSelector('text=Load the pickup list', { timeout: 15000 })
-await page.click('button:has-text("Load the pickup list")')
+await page.setInputFiles('input[type=file]',
+  resolve(HERE, 'fixtures', 'tata-motors-pickup-list.xlsx'))
 await page.click('button:has-text("Parse and preview")')
 await page.waitForSelector('table', { timeout: 20000 })
 const preview = await page.textContent('body')
-report.realListParsed = preview.includes('40')
+report.xlsxParsed = preview.includes('40')
+report.sheetNamed = preview.includes('sheet "new"')
 report.carryForwardShown = preview.includes('from row above')
 report.acceptanceContainerPresent = preview.includes('TRHU8755445')
 report.publishable =
