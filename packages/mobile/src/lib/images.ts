@@ -53,8 +53,11 @@ export async function prepareEvidenceImage(sourceUri: string): Promise<PreparedI
     encoding: FileSystem.EncodingType.Base64,
   });
   const bytes = base64ToBytes(base64);
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
-
+  const digestBytes = new Uint8Array(bytes);
+  const digest = await Crypto.digest(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    digestBytes,
+  );
   return {
     uri: compressed.uri,
     sha256: bytesToHex(digest),

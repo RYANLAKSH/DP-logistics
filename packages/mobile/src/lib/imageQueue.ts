@@ -22,7 +22,14 @@ import {
   imageQueueStats,
   type QueuedImage,
 } from './store.ts';
-import { refreshUploadUrl, finalizeImage, uploadImageBytes } from './api.ts';
+
+import {
+  refreshUploadUrl,
+  finalizeImage,
+  uploadImageBytes,
+  type PresignedUpload,
+} from './api.ts';
+
 import { discardLocalImage } from './images.ts';
 
 export interface ImageSyncOutcome {
@@ -39,20 +46,34 @@ const EXPIRY_MARGIN_MS = 2 * 60 * 1000;
 const isUsable = (image: QueuedImage): boolean => {
   if (!image.uploadUrl) return false;
   if (!image.urlExpiresAt) return true;
-  return new Date(image.urlExpiresAt).getTime() - EXPIRY_MARGIN_MS > Date.now();
+
+  return (
+    new Date(image.urlExpiresAt).getTime() - EXPIRY_MARGIN_MS >
+    Date.now()
+  );
 };
 
 let running = false;
 
 export async function drainImageQueue(): Promise<ImageSyncOutcome> {
   const outcome: ImageSyncOutcome = {
-    uploaded: 0, failed: 0, pending: 0, permanentlyFailed: 0, offline: false,
+    uploaded: 0,
+    failed: 0,
+    pending: 0,
+    permanentlyFailed: 0,
+    offline: false,
   };
 
   if (running) {
     const stats = await imageQueueStats();
-    return { ...outcome, pending: stats.pending, permanentlyFailed: stats.failed };
+
+    return {
+      ...outcome,
+      pending: stats.pending,
+      permanentlyFailed: stats.failed,
+    };
   }
+
   running = true;
 
   try {
@@ -61,69 +82,104 @@ export async function drainImageQueue(): Promise<ImageSyncOutcome> {
       // every remaining image on the same failure.
       if (outcome.offline) break;
 
-      let upload = isUsable(image)
-        ? { url: image.uploadUrl!, method: 'PUT' as const,
+      let upload: PresignedUpload | null = isUsable(image)
+        ? {
+            url: image.uploadUrl!,
+            method: 'PUT',
             headers: { 'content-type': image.contentType },
-            expiresAt: image.urlExpiresAt ?? '' }
+            expiresAt: image.urlExpiresAt ?? '',
+          }
         : null;
 
       if (!upload) {
         const refreshed = await refreshUploadUrl(image.scanId);
-        if (!refreshed.ok) {
-          if (refreshed.offline) { outcome.offline = true; break; }
 
-          // 409 ALREADY_VERIFIED means the server has it and we simply lost the
-          // acknowledgement — that is success, not a failure to retry.
+        if (!refreshed.ok) {
+          if (refreshed.offline) {
+            outcome.offline = true;
+            break;
+          }
+
+          // 409 ALREADY_VERIFIED means the server has it and we simply lost
+          // the acknowledgement — that is success, not a failure to retry.
           if (refreshed.code === 'ALREADY_VERIFIED') {
             await markImageVerified(image.scanId);
             await discardLocalImage(image.localUri);
             outcome.uploaded++;
             continue;
           }
-          await markImageAttemptFailed(image.scanId, refreshed.message);
+
+          await markImageAttemptFailed(
+            image.scanId,
+            refreshed.message,
+          );
+
           outcome.failed++;
           continue;
         }
+
         upload = refreshed.data.upload;
         await attachUploadUrl(image.scanId, upload);
       }
 
       const put = await uploadImageBytes(upload, image.localUri);
+
       if (!put.ok) {
-        if (put.offline) { outcome.offline = true; break; }
+        if (put.offline) {
+          outcome.offline = true;
+          break;
+        }
 
         // A rejected capability means the URL died; get a new one next pass
         // rather than replaying a dead one.
-        if (put.status === 403) await invalidateUploadUrl(image.scanId);
+        if (put.status === 403) {
+          await invalidateUploadUrl(image.scanId);
+        }
 
-        await markImageAttemptFailed(image.scanId, put.message);
+        await markImageAttemptFailed(
+          image.scanId,
+          put.message,
+        );
+
         outcome.failed++;
         continue;
       }
 
       const finalized = await finalizeImage(image.scanId);
+
       if (!finalized.ok) {
-        if (finalized.offline) { outcome.offline = true; break; }
+        if (finalized.offline) {
+          outcome.offline = true;
+          break;
+        }
 
         // HASH_MISMATCH after a clean PUT means the bytes were corrupted in
         // transit; re-uploading is the right response. Retries are bounded, so
         // a genuinely broken local file eventually lands in 'failed' for a
         // human to look at rather than looping forever.
-        await markImageAttemptFailed(image.scanId, finalized.code ?? finalized.message);
+        await markImageAttemptFailed(
+          image.scanId,
+          finalized.code ?? finalized.message,
+        );
+
         outcome.failed++;
         continue;
       }
 
       await markImageVerified(image.scanId);
-      // Only now is the local copy safe to delete — the server has confirmed a
-      // byte-identical copy.
+
+      // Only now is the local copy safe to delete — the server has confirmed
+      // a byte-identical copy.
       await discardLocalImage(image.localUri);
+
       outcome.uploaded++;
     }
 
     const stats = await imageQueueStats();
+
     outcome.pending = stats.pending;
     outcome.permanentlyFailed = stats.failed;
+
     return outcome;
   } finally {
     running = false;

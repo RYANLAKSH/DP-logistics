@@ -112,7 +112,7 @@ export default function App() {
             locationId={locationId!}
             locationName={locationName}
             officerName={session.user.fullName}
-            onStartScan={() => setStage({ name: 'scan-container' })}
+            onOpenContainer={(containerNo) => setStage({ name: 'scan-container' })}
             onSignOut={signOut}
           />
         ) : stage.name === 'scan-container' ? (
