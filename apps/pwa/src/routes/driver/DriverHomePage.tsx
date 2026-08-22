@@ -47,7 +47,10 @@ export function DriverHomePage() {
       action={
         <div className="flex items-center gap-3">
           <SyncIndicator />
-          <button onClick={signOut} className="text-sm text-paper/70 underline">
+          <button
+            onClick={signOut}
+            className="inline-flex min-h-11 items-center text-sm text-paper/70 underline"
+          >
             Sign out
           </button>
         </div>

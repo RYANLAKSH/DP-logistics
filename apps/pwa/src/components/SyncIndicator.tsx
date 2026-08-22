@@ -30,7 +30,7 @@ export function SyncIndicator() {
     return (
       <Link
         to="/driver/sync"
-        className="flex items-center gap-1.5 rounded-full bg-warn-100 px-3 py-1
+        className="flex min-h-11 items-center gap-1.5 rounded-full bg-warn-100 px-3
                    text-xs font-bold uppercase tracking-wide text-warn-500"
       >
         <span aria-hidden="true">↻</span>
@@ -40,7 +40,7 @@ export function SyncIndicator() {
   }
 
   return (
-    <Link to="/driver/sync" aria-label="Everything is synced">
+    <Link to="/driver/sync" aria-label="Everything is synced" className="flex min-h-11 items-center">
       <span className="flex items-center gap-1.5 rounded-full bg-ok-100 px-3 py-1
                        text-xs font-bold uppercase tracking-wide text-ok-500">
         <span aria-hidden="true">●</span>

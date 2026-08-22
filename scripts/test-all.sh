@@ -36,6 +36,7 @@ if curl -sf -o /dev/null "${E2E_BASE_URL:-http://localhost:4173}/login"; then
   run "e2e: offline"        npm run e2e:offline -w @dp/pwa
   run "e2e: OCR"            npm run e2e:ocr -w @dp/pwa
   run "e2e: denials"        npm run e2e:denials -w @dp/pwa
+  run "e2e: accessibility"  npm run e2e:a11y -w @dp/pwa
 else
   printf '\n\033[33m==> browser suites skipped: nothing serving on :4173\033[0m\n'
   printf '    npm run build -w @dp/pwa && npm run preview -w @dp/pwa\n'

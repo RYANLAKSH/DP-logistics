@@ -66,7 +66,8 @@ export function BrandFooter({ className = '' }: { className?: string }) {
         href={RYLA_WEBSITE}
         target="_blank"
         rel="noreferrer noopener"
-        className="underline decoration-line/60 underline-offset-2 hover:text-ink-900"
+        className="inline-flex min-h-11 items-center underline decoration-line/60
+                   underline-offset-2 hover:text-ink-900"
       >
         rylaglobalservices.com
       </a>

@@ -67,6 +67,18 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   build: {
+    /**
+     * Pinned rather than left to the default, which moves between Vite
+     * releases and would quietly drop a handset out of support on a routine
+     * dependency bump.
+     *
+     * iOS 16.4 is the real floor and it is not ours to choose: it is the first
+     * Safari that gives an installed PWA camera access, and without a camera
+     * there is no evidence and therefore no movement. Chrome 110 is the
+     * equivalent vintage on Android. Anything older is told so by name on the
+     * camera screen rather than failing in a way a driver cannot interpret.
+     */
+    target: ['chrome110', 'safari16.4'],
     // The OCR engine dominates a driver's download and is fetched separately
     // by the worker, so the JS budget here is about everything else.
     chunkSizeWarningLimit: 400,

@@ -100,7 +100,10 @@ export function ManagerShell({
           <div className="text-right text-sm lg:hidden">
             <p className="font-medium text-paper">{profile?.fullName}</p>
             <p className="text-xs text-paper/60">{profile?.role}</p>
-            <button onClick={signOut} className="mt-0.5 underline text-paper/75">
+            <button
+              onClick={signOut}
+              className="inline-flex min-h-11 items-center underline text-paper/75"
+            >
               Sign out
             </button>
           </div>
@@ -116,7 +119,7 @@ export function ManagerShell({
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `block whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium
+                  `flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 text-sm font-medium
                    ${isActive ? 'bg-paper text-ink-900' : 'text-paper/75 hover:bg-ink-800'}`
                 }
               >
@@ -128,7 +131,10 @@ export function ManagerShell({
         <div className="hidden px-4 py-4 text-sm text-paper/60 lg:block">
           <p className="font-medium text-paper">{profile?.fullName}</p>
           <p className="mb-3">{profile?.role}</p>
-          <button onClick={signOut} className="underline hover:text-paper">
+          <button
+            onClick={signOut}
+            className="inline-flex min-h-11 items-center underline hover:text-paper"
+          >
             Sign out
           </button>
           <BrandFooter className="mt-6 text-left text-paper/40" />

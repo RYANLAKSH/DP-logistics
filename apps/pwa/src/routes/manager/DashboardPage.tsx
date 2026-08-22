@@ -231,7 +231,7 @@ export function DashboardPage() {
                       <button
                         key={f}
                         onClick={() => setFeedFilter(f)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                        className={`min-h-11 rounded-full border px-4 text-xs font-semibold ${
                           feedFilter === f
                             ? 'border-ink-900 bg-ink-900 text-paper'
                             : 'border-line/30 bg-white text-ink-700'
@@ -241,9 +241,10 @@ export function DashboardPage() {
                       </button>
                     ))}
                     <select
+                      aria-label="Filter the feed by driver"
                       value={driverFilter}
                       onChange={(e) => setDriverFilter(e.target.value)}
-                      className="rounded-full border border-line/30 px-3 py-1 text-xs"
+                      className="min-h-11 rounded-full border border-line/30 px-3 text-xs"
                     >
                       <option value="ALL">All drivers</option>
                       {drivers.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -273,7 +274,7 @@ export function DashboardPage() {
                       ) : (
                         <Link
                           to="/manager/exceptions"
-                          className="flex items-center gap-2 text-sm text-bad-500 underline"
+                          className="flex min-h-11 items-center gap-2 text-sm text-bad-500 underline"
                         >
                           <StatusBadge status="EXCEPTION" size="sm" />
                           {item.detail}

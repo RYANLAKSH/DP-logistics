@@ -5,7 +5,9 @@ import { Spinner } from '@/components/States'
 import { DataProvider } from '@/data/provider'
 import { OcrProviderScope } from '@/lib/ocr/provider'
 import { UpdateBanner } from '@/lib/serviceWorker'
-import { SessionProvider } from '@/lib/session'
+import { ErrorBoundary } from '@/lib/ErrorBoundary'
+import { SessionProvider, useSession } from '@/lib/session'
+import { installGlobalErrorHandlers } from '@/lib/telemetry'
 import { RequireAdmin, RequireAuth, RequireRole, RoleHome } from '@/routes/guards'
 import { LoginPage } from '@/routes/LoginPage'
 import { NotFoundPage, OfflinePage, UnauthorizedPage } from '@/routes/ErrorPages'
@@ -69,6 +71,16 @@ const queryClient = new QueryClient({
   },
 })
 
+/** Wraps the routes in a boundary that knows who was signed in. */
+function RoutesBoundary() {
+  const { profile } = useSession()
+  return (
+    <ErrorBoundary role={profile?.role}>
+      <AppRoutes />
+    </ErrorBoundary>
+  )
+}
+
 export function AppRoutes() {
   return (
     <Suspense fallback={<Spinner label="Loading" />}>
@@ -130,19 +142,29 @@ export function AppRoutes() {
   )
 }
 
+// Installed at module scope so a failure during the first render is caught
+// too. That is the one most likely to be a bad deploy, and the one nobody
+// would otherwise hear about.
+installGlobalErrorHandlers()
+
 export function App() {
   return (
+    <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <DataProvider>
         <OcrProviderScope>
           <BrowserRouter>
             <SessionProvider>
               <UpdateBanner />
-              <AppRoutes />
+              {/* A second boundary inside the session, so a screen that throws
+                  is recoverable without losing the signed-in session — and so
+                  the report carries the role that was using it. */}
+              <RoutesBoundary />
             </SessionProvider>
           </BrowserRouter>
         </OcrProviderScope>
       </DataProvider>
     </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

@@ -40,9 +40,12 @@ export function LoginPage() {
           <div className="rounded-card bg-white px-6 py-4">
             <BrandLogo width={216} />
           </div>
-          <p className="mt-4 text-sm text-paper/70">
+          {/* The page's heading, not decoration: a screen reader announcing
+              "RYLA Verify" then nothing leaves someone with no idea what the
+              form below is for. */}
+          <h1 className="mt-4 text-sm text-paper/70">
             The right vehicle, into the right container.
-          </p>
+          </h1>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4 rounded-card bg-white p-5">
