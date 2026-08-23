@@ -1,0 +1,61 @@
+name: CI
+
+# Runs on every pull request (against any base branch) and on push to the
+# repository's actual default branch. There is no main/master branch in this
+# repo — claude/cargo-reconciliation-app-arch-3pw3xk is it (see origin/HEAD).
+# The only other branch on the remote, claude/vehicle-logistics-pwa-scanning-0fxpe1,
+# belongs to a different, unrelated project that happens to share this GitHub
+# remote — it is deliberately not included here.
+on:
+  pull_request:
+  push:
+    branches:
+      - claude/cargo-reconciliation-app-arch-3pw3xk
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No engines field or .nvmrc exists anywhere in the repo to pin this, so
+      # this matches the Node version the project has actually been built and
+      # tested against (node --experimental-strip-types is used by every
+      # workspace's dev/test scripts, and packages/api's db.ts uses node:sqlite
+      # via DatabaseSync — both need a recent Node runtime).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: 'npm'
+
+      # package-lock.json is authoritative: npm ci installs exactly what it
+      # specifies and fails if package.json and the lockfile have drifted,
+      # rather than silently resolving new versions the way npm install would.
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      # packages/shared-rules ships as compiled output (main/types point at
+      # ./dist/...), and dist/ is gitignored — it does not exist on a fresh
+      # checkout. Every other workspace depends on @dp/shared-rules at
+      # runtime, so this must run before tests or typechecks.
+      - name: Build workspace packages
+        run: npm run build --workspaces --if-present
+
+      # Runs every workspace's test script, including the Stage 5
+      # (auth.test.ts) and Stage 6 (notifications.test.ts) security
+      # regression suites — no separate invocation needed, they're picked up
+      # by packages/api's own "test": "node --experimental-strip-types --test
+      # src/__tests__/*.test.ts" glob automatically.
+      - name: Run test suite (all workspaces)
+        run: npm test --workspaces --if-present
+
+      - name: Typecheck packages/api
+        working-directory: packages/api
+        run: npx tsc -p tsconfig.json
+
+      - name: Typecheck packages/mobile
+        working-directory: packages/mobile
+        run: npx tsc --noEmit
