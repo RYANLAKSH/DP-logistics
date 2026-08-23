@@ -35,6 +35,7 @@ const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex
 const pdf = (text: string): Buffer => Buffer.from(`%PDF-1.4\n${text}\n%%EOF`);
 
 before(async () => {
+  process.env.JWT_SECRET = 'documents-test-jwt-secret';
   db = openDb(':memory:');
   fixture = seed(db);
   storageRoot = mkdtempSync(join(tmpdir(), 'dp-docs-'));

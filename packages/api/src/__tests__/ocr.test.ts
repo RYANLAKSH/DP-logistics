@@ -43,6 +43,7 @@ const scanBytes = (marker: string): Buffer =>
   Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(marker.repeat(40))]);
 
 before(async () => {
+  process.env.JWT_SECRET = 'ocr-test-jwt-secret';
   db = openDb(':memory:');
   fixture = seed(db);
   storageRoot = mkdtempSync(join(tmpdir(), 'dp-ocr-'));

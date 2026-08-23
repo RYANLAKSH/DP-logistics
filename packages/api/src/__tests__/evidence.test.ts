@@ -35,6 +35,7 @@ const imageBytes = (marker: string): Buffer =>
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 before(async () => {
+  process.env.JWT_SECRET = 'evidence-test-jwt-secret';
   db = openDb(':memory:');
   fixture = seed(db);
 

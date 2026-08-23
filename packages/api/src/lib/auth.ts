@@ -65,17 +65,25 @@ export function verifyPassword(password: string, stored: string): boolean {
  * Access tokens
  * ------------------------------------------------------------------ */
 
+/**
+ * Fails closed, in every environment, with no fallback.
+ *
+ * Gating this on NODE_ENV === 'production' was the bug: an unset, misspelled,
+ * or otherwise non-'production' NODE_ENV silently accepted a hardcoded,
+ * source-controlled secret ('dev-only-insecure-secret') — predictable by
+ * anyone who reads this file, in whatever environment actually ran with it.
+ * A real secret is required unconditionally instead. Local development sets
+ * its own JWT_SECRET (any non-empty value); there is no environment where
+ * this function will hand back a secret it didn't read from the process.
+ */
 export function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (secret) return secret;
-
-  if (process.env.NODE_ENV === 'production') {
-    // Refusing to boot is the correct behaviour: a generated secret would
-    // silently invalidate every token on restart and, worse, would be
-    // predictable if this ever ran with a fixed fallback.
-    throw new Error('JWT_SECRET must be set in production');
+  const secret = process.env.JWT_SECRET?.trim();
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET is not set. Refusing to sign or verify tokens without a configured secret.',
+    );
   }
-  return 'dev-only-insecure-secret';
+  return secret;
 }
 
 export function signAccessToken(user: AuthUser, deviceRowId?: string): string {

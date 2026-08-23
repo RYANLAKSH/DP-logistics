@@ -20,6 +20,7 @@ let baseUrl: string;
 let fixture: SeedResult;
 
 before(async () => {
+  process.env.JWT_SECRET = 'e2e-test-jwt-secret';
   db = openDb(':memory:');
   fixture = seed(db);
 
