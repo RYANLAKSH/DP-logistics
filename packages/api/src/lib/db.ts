@@ -389,6 +389,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ['scans', 'image_bytes', 'INTEGER'],
   ['scans', 'image_uploaded_at', 'TEXT'],
   ['scans', 'image_verified', 'INTEGER NOT NULL DEFAULT 0'],
+  ['devices', 'revoked_at', 'TEXT'],
+  ['refresh_tokens', 'device_row_id', 'TEXT'],
 ];
 
 export function migrate(db: Db): void {

@@ -28,6 +28,8 @@ export interface AccessClaims {
   sub: string;
   org: string;
   role: Role;
+  /** devices.id — present only when the login that minted this token carried a deviceId. */
+  did?: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -76,8 +78,9 @@ export function getJwtSecret(): string {
   return 'dev-only-insecure-secret';
 }
 
-export function signAccessToken(user: AuthUser): string {
+export function signAccessToken(user: AuthUser, deviceRowId?: string): string {
   const claims: AccessClaims = { sub: user.id, org: user.orgId, role: user.role };
+  if (deviceRowId) claims.did = deviceRowId;
   return jwt.sign(claims, getJwtSecret(), { expiresIn: ACCESS_TTL_SECONDS });
 }
 
@@ -96,14 +99,14 @@ export function verifyAccessToken(token: string): AccessClaims | null {
 const hashToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
-export function issueRefreshToken(db: Db, userId: string): string {
+export function issueRefreshToken(db: Db, userId: string, deviceRowId?: string | null): string {
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + REFRESH_TTL_DAYS * 86400_000).toISOString();
 
   db.prepare(
-    `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(newId(), userId, hashToken(token), expiresAt, nowIso());
+    `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at, device_row_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(newId(), userId, hashToken(token), expiresAt, nowIso(), deviceRowId ?? null);
 
   return token;
 }
@@ -113,25 +116,41 @@ export function issueRefreshToken(db: Db, userId: string): string {
  *
  * Rotation is unconditional: a refresh token is single-use, so a replayed one
  * is evidence of theft rather than a benign retry.
+ *
+ * A refresh token minted for a device that has since been revoked (or never
+ * approved) must not be allowed to mint a fresh access token — otherwise a
+ * rejected device could simply outlive its 15-minute access token instead of
+ * being cut off, via the refresh path alone.
  */
 export function rotateRefreshToken(
   db: Db,
   token: string,
-): { userId: string; refreshToken: string } | null {
+): { userId: string; refreshToken: string; deviceRowId: string | null } | null {
   const row = db
     .prepare(
-      `SELECT id, user_id, expires_at, revoked_at
+      `SELECT id, user_id, expires_at, revoked_at, device_row_id
          FROM refresh_tokens WHERE token_hash = ?`,
     )
     .get(hashToken(token)) as
-    | { id: string; user_id: string; expires_at: string; revoked_at: string | null }
+    | { id: string; user_id: string; expires_at: string; revoked_at: string | null; device_row_id: string | null }
     | undefined;
 
   if (!row || row.revoked_at) return null;
   if (new Date(row.expires_at) < new Date()) return null;
 
+  if (row.device_row_id) {
+    const device = db
+      .prepare('SELECT approved_at, revoked_at FROM devices WHERE id = ?')
+      .get(row.device_row_id) as { approved_at: string | null; revoked_at: string | null } | undefined;
+    if (!device || device.revoked_at || !device.approved_at) return null;
+  }
+
   db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?').run(nowIso(), row.id);
-  return { userId: row.user_id, refreshToken: issueRefreshToken(db, row.user_id) };
+  return {
+    userId: row.user_id,
+    refreshToken: issueRefreshToken(db, row.user_id, row.device_row_id),
+    deviceRowId: row.device_row_id,
+  };
 }
 
 export function revokeRefreshToken(db: Db, token: string): void {

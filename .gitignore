@@ -6,6 +6,8 @@ dist/
 .expo/
 packages/fixtures/data/
 *.db
+supabase/.temp/
+*.backup
 
 # ---------------------------------------------------------------------------
 # Real trade documents and evidence photos must never enter git history.

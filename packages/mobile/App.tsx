@@ -7,7 +7,7 @@
  * and the vehicle in a fixed sequence.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, View, Text } from 'react-native';
@@ -20,7 +20,7 @@ import { ScanScreen, type CaptureResult } from './src/screens/ScanScreen.tsx';
 import { VerdictScreen } from './src/screens/VerdictScreen.tsx';
 import { commitCapture } from './src/lib/capture.ts';
 import { startSyncLoop } from './src/lib/sync.ts';
-import { clearTokens, type LoginResponse } from './src/lib/api.ts';
+import { clearTokens, getOrCreateDeviceId, type LoginResponse } from './src/lib/api.ts';
 import { theme } from './src/components/theme.ts';
 
 const APP_VERSION = '1.0.0';
@@ -32,21 +32,13 @@ type Stage =
   | { name: 'scan-vin'; container: CaptureResult }
   | { name: 'verdict'; result: ReconResult; containerNo: string; vin: string };
 
-/**
- * A stable per-install identifier for device binding. Persisted alongside the
- * tokens, so a reinstall registers as a new device and needs re-approval —
- * which is the intended behaviour, not an inconvenience.
- */
-function useDeviceId(): string {
-  const ref = useRef<string>();
-  if (!ref.current) {
-    ref.current = `dev-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
-  }
-  return ref.current;
-}
-
 export default function App() {
-  const deviceId = useDeviceId();
+  // Resolved once from SecureStore (see getOrCreateDeviceId) rather than
+  // generated fresh per session — a restart must reuse the same device
+  // identity, or the server's device-approval check can never stay satisfied.
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  useEffect(() => { void getOrCreateDeviceId().then(setDeviceId); }, []);
+
   const [session, setSession] = useState<LoginResponse | null>(null);
   const [stage, setStage] = useState<Stage>({ name: 'login' });
   const [busy, setBusy] = useState(false);
@@ -64,6 +56,8 @@ export default function App() {
     if (!session) return;
     return startSyncLoop(() => locationId, () => {});
   }, [session, locationId]);
+
+  if (!deviceId) return null; // brief splash while the device id resolves from SecureStore
 
   if (!session || stage.name === 'login') {
     return (

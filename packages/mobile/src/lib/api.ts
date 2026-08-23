@@ -8,9 +8,11 @@
 
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
 
 const ACCESS_KEY = 'dp.accessToken';
 const REFRESH_KEY = 'dp.refreshToken';
+const DEVICE_ID_KEY = 'dp.deviceId';
 
 export const API_BASE =
   process.env.EXPO_PUBLIC_API_BASE ?? 'http://10.0.2.2:3000'; // Android emulator host
@@ -31,6 +33,26 @@ export async function setTokens(accessToken: string, refreshToken: string): Prom
 export async function clearTokens(): Promise<void> {
   await SecureStore.deleteItemAsync(ACCESS_KEY);
   await SecureStore.deleteItemAsync(REFRESH_KEY);
+}
+
+/**
+ * A stable per-install identifier for device binding, persisted so a normal
+ * restart never looks like a new device — only a reinstall (which clears
+ * SecureStore) does, which is the intended behaviour: a reinstall needs
+ * supervisor re-approval, a restart never should.
+ *
+ * `store` is injectable so this can be unit-tested without the native
+ * SecureStore module; it defaults to the real one for all real callers.
+ */
+export async function getOrCreateDeviceId(
+  store: Pick<typeof SecureStore, 'getItemAsync' | 'setItemAsync'> = SecureStore,
+): Promise<string> {
+  const existing = await store.getItemAsync(DEVICE_ID_KEY);
+  if (existing) return existing;
+
+  const id = `dev-${Crypto.randomUUID()}`;
+  await store.setItemAsync(DEVICE_ID_KEY, id);
+  return id;
 }
 
 async function refreshTokens(): Promise<boolean> {
@@ -108,7 +130,7 @@ export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
   user: { id: string; fullName: string; email: string; role: string; orgId: string };
-  deviceStatus: 'approved' | 'pending_approval' | 'not_registered';
+  deviceStatus: 'approved' | 'pending_approval' | 'revoked' | 'not_registered';
   locations: { id: string; code: string; name: string }[];
 }
 
@@ -121,7 +143,11 @@ export async function login(
   const result = await call<LoginResponse>('POST', '/v1/auth/login', {
     email, password, deviceId, platform: 'android', appVersion,
   });
-  if (result.ok) await setTokens(result.data.accessToken, result.data.refreshToken);
+  // An unapproved/revoked device gets a 403 with no tokens (server-enforced,
+  // not a client decision) — only store tokens when there are actually some.
+  if (result.ok && result.data.accessToken) {
+    await setTokens(result.data.accessToken, result.data.refreshToken);
+  }
   return result;
 }
 
