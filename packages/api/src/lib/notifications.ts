@@ -95,10 +95,55 @@ const sanitizeSubject = (subject: string): string =>
   subject.replace(/[\r\n]+/g, ' ').slice(0, 200);
 
 /**
+ * How long a low-priority event stays suppressed after the last real send of
+ * the same (org, location, event type) — the same 15-minute figure the
+ * architecture doc suggests for a MATCH digest window.
+ */
+export const BATCH_WINDOW_MINUTES = 15;
+
+/**
+ * True if a real send already went out (or was attempted) for this
+ * (org, location, event type) within the cooldown window.
+ *
+ * `notifications` has no org_id/location_id of its own — both are reached via
+ * the reconciliation and scan session the notification was raised from,
+ * which every batchable event already carries a reconciliation_id for. A
+ * missing locationId (only possible for OVERRIDE_APPLIED today, which is
+ * high-priority and never reaches this check) matches on org alone rather
+ * than excluding every row.
+ */
+function withinCooldown(db: Db, orgId: string, locationId: string | undefined, eventType: EventType): boolean {
+  const cutoff = new Date(Date.now() - BATCH_WINDOW_MINUTES * 60_000).toISOString();
+  const row = db
+    .prepare(
+      `SELECT n.id FROM notifications n
+         JOIN reconciliations r ON r.id = n.reconciliation_id
+         JOIN scan_sessions s ON s.id = r.session_id
+        WHERE r.org_id = ?
+          AND (? IS NULL OR s.location_id = ?)
+          AND n.event_type = ?
+          AND n.status IN ('sent', 'failed')
+          AND n.queued_at > ?
+        ORDER BY n.queued_at DESC LIMIT 1`,
+    )
+    .get(orgId, locationId ?? null, locationId ?? null, eventType, cutoff);
+  return Boolean(row);
+}
+
+/**
  * Queues and sends one notification, recording the attempt either way.
  *
  * "Did the email go out?" must be answerable from the database, so a failed
- * send is persisted as a failed row rather than thrown away.
+ * send is persisted as a failed row rather than thrown away — and so is a
+ * send suppressed by the cooldown below, as its own distinct 'batched'
+ * status: it is neither a delivery failure nor a successful send, and
+ * conflating it with either would make "did this event actually alert
+ * anyone" unanswerable from the DB.
+ *
+ * High-priority events (see HIGH_PRIORITY) never reach the cooldown check at
+ * all — one bad import flooding MATCH/CONTAINER_COMPLETE must not delay a
+ * WRONG_CONTAINER or OVERRIDE_APPLIED alert by so much as evaluating the
+ * condition.
  */
 export async function sendNotification(
   db: Db,
@@ -121,6 +166,16 @@ export async function sendNotification(
     ).run(id, payload.reconciliationId ?? null, payload.eventType, '', subject,
           payload.body, 'none', nowIso());
     return { id, status: 'skipped', recipients: [] };
+  }
+
+  if (!HIGH_PRIORITY.has(payload.eventType) && withinCooldown(db, orgId, locationId, payload.eventType)) {
+    db.prepare(
+      `INSERT INTO notifications (id, reconciliation_id, event_type, recipients, subject,
+                                  body, provider, status, attempts, queued_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'batched', 0, ?)`,
+    ).run(id, payload.reconciliationId ?? null, payload.eventType, recipients.join(','),
+          subject, payload.body, 'none', nowIso());
+    return { id, status: 'batched', recipients };
   }
 
   db.prepare(
