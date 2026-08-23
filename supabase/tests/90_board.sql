@@ -69,3 +69,60 @@ begin
       format('published table %s must have RLS enabled', t.relname));
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- v_yard_dashboard is grouped by (yard_id, operating_date): a yard gets a new
+-- row every day it operates, and a past day's manifest is never archived —
+-- only same-day republishing archives the prior version. The client query
+-- behind getDashboard() filters by yard_id alone with .maybeSingle(), which
+-- throws PGRST116 the moment more than one row comes back. This proves the
+-- exact failure and the exact fix: filtering by yard AND operating_date keeps
+-- it single-row even once a second day of history exists.
+-- ---------------------------------------------------------------------------
+select tst.login('00000000-0000-0000-0000-0000000000c2');
+do $$
+declare
+  v_yard   uuid := '00000000-0000-0000-0000-0000000000b1';
+  v_import uuid := gen_random_uuid();
+  n        int;
+begin
+  -- A second day's manifest for the same yard, published the ordinary way.
+  insert into manifest_imports (
+    id, org_id, yard_id, operating_date, file_name, file_path, file_sha256,
+    file_bytes, status, row_count, valid_count, rejected_count, uploaded_by, parsed_rows
+  ) values (
+    v_import,
+    '00000000-0000-0000-0000-0000000000a1', v_yard,
+    current_date - 1, 'manifest-yesterday.csv',
+    '00000000-0000-0000-0000-0000000000a1/' || v_yard || '/y/yesterday.csv',
+    repeat('c', 64), 512, 'READY', 2, 2, 0,
+    '00000000-0000-0000-0000-0000000000c2',
+    '[{"row_no":1,"container_no":"TGCU5033177","chassis_no":"MAT900009A0A00009","sequence_no":1},
+      {"row_no":2,"container_no":"TGCU5033177","chassis_no":"MAT900009A0A00010","sequence_no":2}]'::jsonb
+  );
+  perform publish_manifest_from_import(v_import, 'REF-YDAY');
+
+  -- Confirms the scenario is real: more than one PUBLISHED manifest for this
+  -- yard, on different days — which is exactly what v_yard_dashboard groups
+  -- by. The exact count varies with which other suites ran first in this
+  -- shared database; what matters is that it is more than one.
+  select count(*) into n from manifests
+   where yard_id = v_yard and status = 'PUBLISHED';
+  perform tst.ok(n >= 2, 'the yard now has more than one day of published history');
+
+  select count(*) into n from v_yard_dashboard where yard_id = v_yard;
+  perform tst.eq(n,
+    (select count(*) from manifests where yard_id = v_yard and status = 'PUBLISHED')::int,
+    'the dashboard view has exactly one row per published day, as designed');
+  perform tst.ok(n > 1, 'and there is more than one — the ambiguity is real');
+
+  -- The query getDashboard() actually runs: yard AND today. Exactly one row.
+  select count(*) into n from v_yard_dashboard
+   where yard_id = v_yard and operating_date = current_date;
+  perform tst.eq(n, 1,
+    'scoped to yard and today, the row getDashboard() reads is unambiguous');
+
+  raise notice '90_board multi-day dashboard: ok';
+end $$;
+select tst.logout();
+reset role;

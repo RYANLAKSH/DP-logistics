@@ -164,3 +164,39 @@ describe('signIn', () => {
     expect(await ds.currentProfile()).toBeNull()
   })
 })
+
+describe('raiseException', () => {
+  it('maps the raw exceptions row raise_exception returns, not a bare cast', async () => {
+    // raise_exception returns `public.exceptions` — a row type, snake_case on
+    // the wire, exactly like the row acknowledge/resolve/cancel exception all
+    // map through toException(). This one skipped the mapper and cast the raw
+    // row straight to ExceptionRecord: a client reading `.yardId` or
+    // `.raisedAt` got undefined at runtime with no type error, because the
+    // cast is exactly what hides that from the compiler. raised_by_name does
+    // not exist on the table at all — it is a joined field — so it is not
+    // asserted here; toException() does not claim to produce it.
+    const { client, rpc } = fakeClient()
+    rpc.mockResolvedValue({
+      data: {
+        id: 'x1', yard_id: 'yard-nsa', assignment_id: 'a1',
+        type: 'OTHER', status: 'OPEN', severity: 2,
+        expected_value: null, actual_value: null,
+        description: 'plate unreadable', raised_by: 'u-driver',
+        raised_at: '2026-08-22T06:00:00Z',
+        resolved_at: null, resolution: null, resolution_note: null,
+      },
+      error: null,
+    })
+    const ds = new SupabaseDataSource(client)
+
+    const result = await ds.raiseException({ type: 'OTHER', description: 'plate unreadable' })
+
+    expect(result.yardId).toBe('yard-nsa')
+    expect(result.assignmentId).toBe('a1')
+    expect(result.raisedBy).toBe('u-driver')
+    expect(result.raisedAt).toBe('2026-08-22T06:00:00Z')
+    expect(result.description).toBe('plate unreadable')
+    // The raw snake_case keys must not leak through as a silent alternative.
+    expect((result as unknown as Record<string, unknown>).yard_id).toBeUndefined()
+  })
+})

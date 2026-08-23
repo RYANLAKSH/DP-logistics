@@ -212,6 +212,12 @@ export class SupabaseDataSource implements DataSource {
   }
 
   async raiseException(input: ExceptionSubmission): Promise<ExceptionRecord> {
+    // raise_exception returns public.exceptions — a row type, snake_case on
+    // the wire — same as acknowledge/resolve/cancel below. This one skipped
+    // the mapper and cast the raw row straight to ExceptionRecord, so a
+    // caller reading .raisedByName or .yardId got undefined at runtime with
+    // no type error, because the cast suppressed the check that would have
+    // caught it.
     const data = unwrap(
       await this.db.rpc('raise_exception', {
         p_assignment_id: input.assignmentId ?? null,
@@ -219,7 +225,7 @@ export class SupabaseDataSource implements DataSource {
         p_description: input.description,
       }),
     )
-    return data as ExceptionRecord
+    return toException(data as ExceptionRow)
   }
 
   async listMyMovements(): Promise<MovementEvent[]> {
@@ -244,10 +250,20 @@ export class SupabaseDataSource implements DataSource {
 
   // -------------------------------------------------------------- manager
   async getDashboard(yardId: string): Promise<DashboardCounters> {
+    // v_yard_dashboard has one row per (yard_id, operating_date) — a yard
+    // accumulates one of those every day it operates, and past days are never
+    // archived (only same-day republishing archives the prior version). Filter
+    // by yard alone, and this returns more than one row the day after the
+    // first: exactly one call site, but a real "second day breaks the query"
+    // trap for anyone who wires this method up later. .maybeSingle() then
+    // throws PGRST116 instead of failing quietly, so it would have been loud
+    // when it happened — this fixes the cause rather than waiting for that.
+    const today = new Date().toISOString().slice(0, 10)
     const { data, error } = await this.db
       .from('v_yard_dashboard')
       .select('*')
       .eq('yard_id', yardId)
+      .eq('operating_date', today)
       .maybeSingle()
     if (error) throw new Error(error.message)
 
