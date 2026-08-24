@@ -203,6 +203,22 @@ export function createServer(db: Db) {
     next();
   };
 
+  /**
+   * supervisor/admin by rank, OR auditor.
+   *
+   * `atLeast()` cannot express this on its own — auditor shares field_officer's
+   * rank (see auth.ts's RANK table and its comment) precisely so that ordinary
+   * rank checks never accidentally grant it supervisor/admin power. Broad,
+   * organization-wide *reads* are the one place auditor is documented
+   * (docs/architecture.md, docs/security.md) to have full reach even though it
+   * outranks nothing, so that reach is granted here explicitly.
+   */
+  const requireBroadReadAccess = (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) return fail(res, 401, 'UNAUTHENTICATED', 'Authentication required');
+    if (req.user.role === 'auditor' || atLeast(req.user.role, 'supervisor')) return next();
+    return fail(res, 403, 'FORBIDDEN', 'Requires supervisor, admin, or auditor');
+  };
+
   /** Officers may only act at locations they are assigned to. */
   const assertLocationAccess = (user: AuthUser, locationId: string): boolean => {
     if (atLeast(user.role, 'admin')) return true;
@@ -544,7 +560,7 @@ export function createServer(db: Db) {
    * Reconciliations
    * ---------------------------------------------------------------- */
 
-  app.get('/v1/reconciliations', authenticate, (req, res) => {
+  app.get('/v1/reconciliations', authenticate, requireBroadReadAccess, (req, res) => {
     const outcome = req.query.outcome ? String(req.query.outcome) : null;
     const limit = Math.min(Number(req.query.limit ?? 50), 200);
 
@@ -559,7 +575,7 @@ export function createServer(db: Db) {
     res.json({ reconciliations: rows });
   });
 
-  app.get('/v1/reconciliations/:id', authenticate, (req, res) => {
+  app.get('/v1/reconciliations/:id', authenticate, requireBroadReadAccess, (req, res) => {
     const row = db
       .prepare('SELECT * FROM reconciliations WHERE id = ? AND org_id = ?')
       .get(String(req.params.id), req.user!.orgId);
@@ -908,7 +924,7 @@ export function createServer(db: Db) {
     }
   }));
 
-  app.get('/v1/documents', authenticate, (req, res) => {
+  app.get('/v1/documents', authenticate, requireBroadReadAccess, (req, res) => {
     res.json({
       documents: listDocuments(db, req.user!.orgId, {
         docType: req.query.docType ? String(req.query.docType) : undefined,
@@ -918,7 +934,7 @@ export function createServer(db: Db) {
     });
   });
 
-  app.get('/v1/documents/:id/view', authenticate, wrap(async (req, res) => {
+  app.get('/v1/documents/:id/view', authenticate, requireBroadReadAccess, wrap(async (req, res) => {
     const signed = await documentViewUrl(db, req.user!.orgId, String(req.params.id), {
       id: req.user!.id,
       ip: req.ip ?? null,
@@ -957,7 +973,7 @@ export function createServer(db: Db) {
     res.json(result);
   });
 
-  app.get('/v1/documents/for/:entityType/:entityId', authenticate, (req, res) => {
+  app.get('/v1/documents/for/:entityType/:entityId', authenticate, requireBroadReadAccess, (req, res) => {
     const entityType = String(req.params.entityType);
     if (!['container', 'vin', 'delivery_order', 'pickup_report', 'booking'].includes(entityType)) {
       return fail(res, 400, 'INVALID_INPUT', 'Unknown entity type');
@@ -972,7 +988,7 @@ export function createServer(db: Db) {
    * ---------------------------------------------------------------- */
 
   /** Recognition state for one document, including what its text linked to. */
-  app.get('/v1/documents/:id/ocr', authenticate, (req, res) => {
+  app.get('/v1/documents/:id/ocr', authenticate, requireBroadReadAccess, (req, res) => {
     const job = latestOcrJob(db, req.user!.orgId, String(req.params.id));
     if (!job) return fail(res, 404, 'NOT_FOUND', 'No recognition attempted for this document');
     res.json(job);
@@ -1017,7 +1033,7 @@ export function createServer(db: Db) {
    * are confirmed aboard with verified photographs, and whether the paperwork is
    * complete. The answer to "can this ship?".
    */
-  app.get('/v1/containers/:containerNo/dossier', authenticate, (req, res) => {
+  app.get('/v1/containers/:containerNo/dossier', authenticate, requireBroadReadAccess, (req, res) => {
     const dossier = buildDossier(db, req.user!.orgId, String(req.params.containerNo));
     if (!dossier) return fail(res, 404, 'NOT_FOUND', 'Container not on any active report');
     res.json(dossier);
