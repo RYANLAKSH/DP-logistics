@@ -6,10 +6,9 @@
 -- `supabase db push` has applied the migrations.
 --
 -- Why this file exists rather than a screen in the app: yards have no creation
--- UI at all, the users screen is read-only, and devices have no approval
--- screen — the RPCs behind all three exist and are audited, but nothing calls
--- them yet. Until that is built, this is the admin panel. Each part is
--- separately runnable and safe to re-run.
+-- UI at all and the users screen is read-only — the RPCs behind both exist and
+-- are audited, but nothing calls them yet. Until that is built, this is the
+-- admin panel. Each part is separately runnable and safe to re-run.
 -- ---------------------------------------------------------------------------
 
 
@@ -92,32 +91,36 @@ commit;
 select 'part 3 done' as status;
 
 
--- ============================ PART 4 — device approval ======================
--- A driver's phone registers itself as PENDING the first time they sign in.
--- Until it is APPROVED the server refuses every movement with
--- DEVICE_NOT_APPROVED — which is correct, and with no approval screen yet it
--- is also a dead end.
+-- ============================ PART 4 — device binding =======================
+-- Nothing to do here. This part is a check, not a step.
 --
--- Two ways out. Pick deliberately.
+-- Drivers sign in with an email and a password, and that is the whole of it.
+-- Migration 20260101002300 sets require_device_approval to false by default and
+-- switches it off for any organisation created before it, so PART 1 above
+-- already left this in the right state.
+--
+-- An earlier version of this file told you a driver's phone registers itself as
+-- PENDING on first sign-in and that you would approve it here. That was wrong:
+-- no code anywhere inserts a row into `devices`, the client never sends a device
+-- key, and there is no approval screen. The query below will show you an empty
+-- table, and that is expected rather than a sign something failed.
 
--- 4a. Approve the phones that have registered. Look first, then approve:
 select d.id, d.device_key, d.status, p.full_name, d.created_at
   from devices d join profiles p on p.id = d.user_id
  order by d.created_at desc;
 
--- ...then, for each one you recognise:
--- update devices set status = 'APPROVED', approved_at = now(),
---        approved_by = '<ADMIN-AUTH-UUID>'
---  where id = '<DEVICE-ID>';
-
--- 4b. Or switch the control off for the pilot, and back on before go-live.
+-- What this costs, stated plainly: a password is now sufficient on its own. Any
+-- handset holding a driver's credentials can complete movements. Every movement
+-- is still photographed, hashed, GPS-stamped where permitted, and audited — the
+-- evidence chain is untouched — but the handset itself is no longer a factor.
 --
--- What you give up: device binding is what stops a driver's stolen or shared
--- credentials being used from another phone. Off, a password is enough. For a
--- supervised pilot on known handsets that is a reasonable trade; for a live
--- yard it is not, and 4a is a two-line update once there is a screen for it.
+-- Turning it back on is one UPDATE, and it is deliberately commented out,
+-- because on its own it would refuse every movement in the yard: the switch
+-- works, the two halves that feed it do not exist yet. It needs a client that
+-- generates and sends a device key, something to create the device row, and a
+-- screen to approve it. Do not uncomment this until those exist.
 --
--- update org_settings set require_device_approval = false
+-- update org_settings set require_device_approval = true
 --  where org_id = '11111111-1111-1111-1111-111111111111';
 
 
@@ -130,5 +133,6 @@ select
   (select count(*) from profiles where role = 'ADMIN')         as admins,
   (select count(*) from profiles where role = 'MANAGER')       as managers,
   (select count(*) from profiles where role = 'DRIVER')        as drivers,
-  (select count(*) from devices where status = 'APPROVED')     as approved_devices,
+  -- Expect device_binding_on = false. True with no approved devices means no
+  -- driver can complete a movement — see PART 4.
   (select require_device_approval from org_settings limit 1)   as device_binding_on;

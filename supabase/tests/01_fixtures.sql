@@ -82,9 +82,15 @@ insert into yards (id, org_id, code, name) values
   ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000a1', 'NSA', 'Nhava Sheva'),
   ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000a1', 'MUN', 'Mundra');
 
-insert into org_settings (org_id) values
-  ('00000000-0000-0000-0000-0000000000a1'),
-  ('00000000-0000-0000-0000-0000000000a2');
+-- Device binding is OFF in production (see 20260101002300_device_binding_off).
+-- It is switched ON here deliberately, and explicitly rather than by relying on
+-- the column default, so that 40_verification.sql keeps proving the gate still
+-- refuses an unapproved handset. A fixture that inherited the production
+-- default would silently stop testing the mechanism the day the default moved
+-- — which is exactly what this line exists to prevent.
+insert into org_settings (org_id, require_device_approval) values
+  ('00000000-0000-0000-0000-0000000000a1', true),
+  ('00000000-0000-0000-0000-0000000000a2', true);
 
 insert into profiles (id, org_id, role, full_name) values
   ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', 'ADMIN',   'Asha Admin'),
