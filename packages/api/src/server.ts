@@ -24,6 +24,7 @@ import {
   revokeRefreshToken,
   ACCESS_TTL_SECONDS,
 } from './lib/auth.ts';
+import { createLoginRateLimiter } from './lib/rateLimit.ts';
 import {
   getStorage,
   LocalStorageDriver,
@@ -87,6 +88,9 @@ const wrap =
 
 export function createServer(db: Db) {
   const app = express();
+
+  // One limiter per server instance — see lib/rateLimit.ts for the policy.
+  const loginRateLimiter = createLoginRateLimiter();
 
   /* ---------------------------------------------------------------- *
    * Local object store
@@ -225,14 +229,37 @@ export function createServer(db: Db) {
     if (!parsed.success) return fail(res, 400, 'INVALID_INPUT', 'Bad login payload');
 
     const { email, password, deviceId, platform, appVersion } = parsed.data;
+    const normalizedEmail = email.trim().toLowerCase();
+    // req.ip is Express's own view of the socket's remote address — the app
+    // never sets `trust proxy`, so this cannot be spoofed via X-Forwarded-For
+    // or any other client-supplied header.
+    const clientIp = req.ip ?? 'unknown';
+
+    const ipLimit = loginRateLimiter.checkIp(clientIp);
+    if (!ipLimit.allowed) {
+      res.set('Retry-After', String(ipLimit.retryAfterSeconds));
+      return fail(res, 429, 'TOO_MANY_ATTEMPTS', 'Too many login attempts. Try again later.');
+    }
+
+    const identifierLimit = loginRateLimiter.checkIdentifier(normalizedEmail);
+    if (!identifierLimit.allowed) {
+      res.set('Retry-After', String(identifierLimit.retryAfterSeconds));
+      return fail(res, 429, 'TOO_MANY_ATTEMPTS', 'Too many login attempts. Try again later.');
+    }
+
     const row = db
       .prepare('SELECT * FROM users WHERE email = ? AND is_active = 1')
-      .get(email.toLowerCase()) as Record<string, unknown> | undefined;
+      .get(normalizedEmail) as Record<string, unknown> | undefined;
 
     // Same response for unknown user and wrong password — no account enumeration.
     if (!row || !verifyPassword(password, String(row.password_hash))) {
       return fail(res, 401, 'INVALID_CREDENTIALS', 'Email or password is incorrect');
     }
+
+    // A real login succeeded — clear this identifier's failed-attempt budget
+    // so ordinary day-to-day use (occasional typo, then the right password)
+    // never accumulates toward the brute-force threshold.
+    loginRateLimiter.recordSuccess(normalizedEmail);
 
     const user: AuthUser = {
       id: String(row.id),
