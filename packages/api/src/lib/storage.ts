@@ -18,7 +18,7 @@
  * between them changes configuration, not calling code.
  */
 
-import { createHmac, timingSafeEqual, createHash, randomBytes } from 'node:crypto';
+import { createHmac, timingSafeEqual, createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
@@ -397,16 +397,22 @@ export function getStorage(): StorageDriver {
       process.env.S3_ENDPOINT,
     );
   } else {
-    const secret = process.env.STORAGE_SECRET;
-    if (!secret && process.env.NODE_ENV === 'production') {
-      // Without a stable secret every capability URL breaks on restart, and a
-      // predictable fallback would let anyone mint one.
-      throw new Error('STORAGE_SECRET must be set in production');
+    // Fails closed, in every environment, with no fallback — the same fix
+    // applied to getJwtSecret(). Gating this on NODE_ENV === 'production' was
+    // the bug: an unset, misspelled, or otherwise non-'production' NODE_ENV
+    // silently accepted a fresh random secret instead, which breaks every
+    // previously-issued capability URL on the next restart and does so
+    // without ever surfacing an error.
+    const secret = process.env.STORAGE_SECRET?.trim();
+    if (!secret) {
+      throw new Error(
+        'STORAGE_SECRET is not set. Refusing to sign or verify storage capability URLs without a configured secret.',
+      );
     }
     driver = new LocalStorageDriver(
       process.env.STORAGE_DIR ?? './.evidence',
       baseUrl,
-      secret ?? randomBytes(32).toString('hex'),
+      secret,
     );
   }
   return driver;

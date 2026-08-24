@@ -2,9 +2,15 @@
   "name": "@dp/api",
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "dev": "node --experimental-strip-types --watch src/main.ts",
-    "start": "node --experimental-strip-types src/main.ts",
+    "start": "node --experimental-strip-types src/start.ts",
+    "seed": "node --experimental-strip-types src/seedDb.ts",
+    "backup": "node --experimental-strip-types src/backup.ts",
+    "restore": "node --experimental-strip-types src/restore.ts",
     "test": "node --experimental-strip-types --test src/__tests__/*.test.ts",
     "typecheck": "tsc -p tsconfig.json"
   },

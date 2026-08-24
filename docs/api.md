@@ -8,16 +8,17 @@ one, because it retries.
 
 ```
 POST   /auth/login              { email, password, device_id, platform, app_version }
-                                → { access_token, refresh_token, user, device_status }
-                                  device_status: 'approved' | 'pending_approval'
+                                → { access_token, refresh_token, user }
 POST   /auth/refresh            { refresh_token } → new pair (rotating; old one revoked)
 POST   /auth/logout             revokes the refresh token
 GET    /auth/me                 → user, role, assigned locations
 POST   /auth/change-password
 ```
 
-Access token 15 min, refresh 30 days. On `pending_approval` the app is read-only until a
-supervisor approves the device.
+Access token 15 min, refresh 30 days. `device_id` is optional and, when supplied, is
+recorded purely for audit bookkeeping (which client instance a session came from) — there
+is no approval step and no device state can block a login or a request. DP Logistics is a
+web application; a browser is not a separately-approved security principal.
 
 ## Mobile — sync
 
@@ -99,14 +100,12 @@ Rejection reasons returned by `/preview` — surface these per row in the UI:
 `INVALID_CONTAINER_CHECK_DIGIT`, `MALFORMED_CONTAINER_NO`, `DUPLICATE_CONTAINER_IN_FILE`,
 `MISSING_REQUIRED_COLUMN`, `UNPARSEABLE_DATE`, `DATE_OUT_OF_VALIDITY_WINDOW`.
 
-## Admin — users, devices, notifications
+## Admin — users, notifications
 
 ```
 GET/POST/PATCH  /admin/users
 POST            /admin/users/:id/deactivate
 POST            /admin/users/:id/locations       { location_ids[] }
-GET             /admin/devices?status=pending
-POST            /admin/devices/:id/approve
 
 GET/POST/DELETE /admin/notification-recipients
 POST            /admin/notification-recipients/test   sends a sample to verify delivery

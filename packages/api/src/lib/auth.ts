@@ -125,10 +125,9 @@ export function issueRefreshToken(db: Db, userId: string, deviceRowId?: string |
  * Rotation is unconditional: a refresh token is single-use, so a replayed one
  * is evidence of theft rather than a benign retry.
  *
- * A refresh token minted for a device that has since been revoked (or never
- * approved) must not be allowed to mint a fresh access token — otherwise a
- * rejected device could simply outlive its 15-minute access token instead of
- * being cut off, via the refresh path alone.
+ * Device approval is no longer an access gate (Stage 11) — device_row_id is
+ * carried through purely so the new token stays linked to the same device
+ * record for bookkeeping, not because that record's standing is consulted.
  */
 export function rotateRefreshToken(
   db: Db,
@@ -145,13 +144,6 @@ export function rotateRefreshToken(
 
   if (!row || row.revoked_at) return null;
   if (new Date(row.expires_at) < new Date()) return null;
-
-  if (row.device_row_id) {
-    const device = db
-      .prepare('SELECT approved_at, revoked_at FROM devices WHERE id = ?')
-      .get(row.device_row_id) as { approved_at: string | null; revoked_at: string | null } | undefined;
-    if (!device || device.revoked_at || !device.approved_at) return null;
-  }
 
   db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?').run(nowIso(), row.id);
   return {

@@ -116,217 +116,139 @@ describe('authentication', () => {
     assert.equal(result.user.role, 'field_officer');
   });
 
-  test('a new device registers as pending approval, and gets no tokens', async () => {
+  test('a brand-new, never-before-seen device id logs in successfully — no approval step exists', async () => {
     const freshDeviceId = `fresh-device-${randomUUID()}`;
     const result = await api('POST', '/v1/auth/login', {
       email: 'officer@dp-logistics.example',
       password: SEED_PASSWORD,
       deviceId: freshDeviceId,
     });
-    assert.equal(result.status, 403);
-    assert.equal(result.json.error.code, 'DEVICE_PENDING_APPROVAL');
-    assert.equal(result.json.accessToken, undefined);
-    assert.equal(result.json.refreshToken, undefined);
+    assert.equal(result.status, 200);
+    assert.ok(result.json.accessToken);
+    assert.ok(result.json.refreshToken);
   });
 
-  test('an unrecognised device id does not bypass approval by being different or unexpected', async () => {
-    // Any never-before-seen string — however it was chosen — starts pending.
-    // Choosing a "clever" id buys nothing.
-    for (const spoofed of ['', 'admin', '../../etc/passwd', 'test-device-01-approved', randomUUID()]) {
-      if (!spoofed) continue; // empty string fails schema validation, not relevant here
-      const result = await api('POST', '/v1/auth/login', {
-        email: 'officer@dp-logistics.example',
-        password: SEED_PASSWORD,
-        deviceId: spoofed,
-      });
-      assert.equal(result.status, 403, `deviceId ${JSON.stringify(spoofed)} should not bypass approval`);
-      assert.equal(result.json.error.code, 'DEVICE_PENDING_APPROVAL');
-    }
-  });
-
-  test("one user's approved device id does not authorize another user's account", async () => {
-    const sharedDeviceId = `shared-device-${randomUUID()}`;
-
-    // Register this device id for officer (User A) and get it genuinely
-    // approved — not merely registered, actually approved — so the test
-    // exercises real inherited-approval risk, not just "an unseen id is
-    // pending" (which a different test already covers).
-    await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId: sharedDeviceId,
-    });
-    const adminToken = (await login('admin@dp-logistics.example')).accessToken;
-    const pending = await api('GET', '/v1/admin/devices?status=pending', undefined, adminToken);
-    const officerDeviceRow = pending.json.devices.find(
-      (d: any) => d.device_id === sharedDeviceId && d.email === 'officer@dp-logistics.example',
-    );
-    assert.ok(officerDeviceRow, 'the officer device must be pending before it can be approved');
-    await api('POST', `/v1/admin/devices/${officerDeviceRow.id}/approve`, {}, adminToken);
-
-    // Confirm the approval actually took, for officer, with this exact string.
-    const officerApproved = await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId: sharedDeviceId,
-    });
-    assert.equal(officerApproved.status, 200);
-    assert.equal(officerApproved.json.deviceStatus, 'approved');
-
-    // The actual property under test: supervisor (User B) logs in with the
-    // *exact same* device-id string that is now approved for officer. If
-    // approval were scoped by device-id string alone rather than by
-    // (user, device), supervisor would inherit it here.
-    const supervisorAttempt = await api('POST', '/v1/auth/login', {
-      email: 'supervisor@dp-logistics.example', password: SEED_PASSWORD, deviceId: sharedDeviceId,
-    });
-    assert.equal(supervisorAttempt.status, 403);
-    assert.equal(supervisorAttempt.json.error.code, 'DEVICE_PENDING_APPROVAL');
-    assert.equal(supervisorAttempt.json.error.details.deviceStatus, 'pending_approval');
-    assert.equal(supervisorAttempt.json.accessToken, undefined);
-    assert.equal(supervisorAttempt.json.refreshToken, undefined);
-  });
-
-  test('an approved device works, and is cut off immediately on revoke — not just at next login', async () => {
-    const deviceId = `fresh-device-${randomUUID()}`;
-    await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-
-    const adminToken = (await login('admin@dp-logistics.example')).accessToken;
-    const pending = await api('GET', '/v1/admin/devices?status=pending', undefined, adminToken);
-    const deviceRow = pending.json.devices.find((d: any) => d.device_id === deviceId);
-    assert.ok(deviceRow, 'the pending device should be visible to the admin');
-
-    await api('POST', `/v1/admin/devices/${deviceRow.id}/approve`, {}, adminToken);
-
-    const approved = await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-    assert.equal(approved.status, 200);
-    assert.equal(approved.json.deviceStatus, 'approved');
-    const officerToken = approved.json.accessToken;
-
-    const meBeforeRevoke = await api('GET', '/v1/auth/me', undefined, officerToken);
-    assert.equal(meBeforeRevoke.status, 200);
-
-    await api('POST', `/v1/admin/devices/${deviceRow.id}/revoke`, {}, adminToken);
-
-    // Same, still-unexpired access token — must be rejected on its very next use.
-    const meAfterRevoke = await api('GET', '/v1/auth/me', undefined, officerToken);
-    assert.equal(meAfterRevoke.status, 401);
-    assert.equal(meAfterRevoke.json.error.code, 'DEVICE_REVOKED');
-  });
-
-  test('a revoked device cannot refresh its way back to a working token', async () => {
-    const deviceId = `fresh-device-${randomUUID()}`;
-    const adminToken = (await login('admin@dp-logistics.example')).accessToken;
-
-    await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-    const list = await api('GET', '/v1/admin/devices?status=pending', undefined, adminToken);
-    const deviceRow = list.json.devices.find((d: any) => d.device_id === deviceId);
-    await api('POST', `/v1/admin/devices/${deviceRow.id}/approve`, {}, adminToken);
-
-    const approved = await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-    const { refreshToken } = approved.json;
-
-    await api('POST', `/v1/admin/devices/${deviceRow.id}/revoke`, {}, adminToken);
-
-    const refreshed = await api('POST', '/v1/auth/refresh', { refreshToken });
-    assert.equal(refreshed.status, 401);
-  });
-
-  test('approving or revoking a device in another org fails, not just for a wrong id', async () => {
-    // A second org, sharing nothing with the seeded one, with its own
-    // supervisor and one pending device — inserted directly, matching how
-    // seed.ts itself builds fixtures.
-    const otherOrgId = newId();
-    db.prepare('INSERT INTO organizations (id, name, created_at) VALUES (?,?,?)')
-      .run(otherOrgId, 'Other Org', nowIso());
-
-    const otherSupervisorId = newId();
-    db.prepare(
-      `INSERT INTO users (id, org_id, email, password_hash, full_name, role, created_at)
-       VALUES (?,?,?,?,?,?,?)`,
-    ).run(otherSupervisorId, otherOrgId, 'supervisor@other-org.example',
-      hashPassword(SEED_PASSWORD), 'Other Supervisor', 'supervisor', nowIso());
-
-    // Logged in without a deviceId — this org has no pre-approved fixture
-    // device for this newly-created user, and device approval is not what
-    // this login is testing.
-    const otherOrgAdminToken = (await api('POST', '/v1/auth/login', {
-      email: 'supervisor@other-org.example', password: SEED_PASSWORD,
-    })).json.accessToken;
-    assert.ok(otherOrgAdminToken, 'the other org supervisor must be able to log in at all');
-
-    // A pending device that belongs to the ORIGINAL seeded org.
-    const deviceId = `fresh-device-${randomUUID()}`;
-    await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-    const ownAdminToken = (await login('admin@dp-logistics.example')).accessToken;
-    const list = await api('GET', '/v1/admin/devices?status=pending', undefined, ownAdminToken);
-    const ownDeviceRow = list.json.devices.find((d: any) => d.device_id === deviceId);
-    assert.ok(ownDeviceRow);
-
-    const approveAttempt = await api(
-      'POST', `/v1/admin/devices/${ownDeviceRow.id}/approve`, {}, otherOrgAdminToken,
-    );
-    assert.equal(approveAttempt.status, 404);
-
-    // Confirm it really wasn't approved by the cross-org call.
-    const stillPending = await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-    assert.equal(stillPending.status, 403);
-
-    // Now legitimately approve it from its own org, then confirm the other
-    // org's supervisor also cannot revoke it.
-    await api('POST', `/v1/admin/devices/${ownDeviceRow.id}/approve`, {}, ownAdminToken);
-    const revokeAttempt = await api(
-      'POST', `/v1/admin/devices/${ownDeviceRow.id}/revoke`, {}, otherOrgAdminToken,
-    );
-    assert.equal(revokeAttempt.status, 404);
-
-    const stillApproved = await api('POST', '/v1/auth/login', {
-      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
-    });
-    assert.equal(stillApproved.status, 200);
-    assert.equal(stillApproved.json.deviceStatus, 'approved');
-  });
-
-  test('logging in with no deviceId at all is entirely unaffected by device approval', async () => {
+  test('logging in with no deviceId at all works exactly the same as with one', async () => {
     const result = await api('POST', '/v1/auth/login', {
       email: 'admin@dp-logistics.example', password: SEED_PASSWORD,
     });
     assert.equal(result.status, 200);
     assert.ok(result.json.accessToken);
-    assert.equal(result.json.deviceStatus, 'not_registered');
   });
 
-  test('a pre-existing token minted before device binding remains unbound (documented, temporary migration behaviour)', async () => {
-    // Simulates a token issued by the old code path: no `did` claim at all,
-    // because that is exactly what a token issued before this deployment
-    // looks like — signAccessToken() called with no deviceRowId argument.
-    const { signAccessToken } = await import('../lib/auth.ts');
+  test('a device row is still recorded for bookkeeping, but never blocks the login that created it', async () => {
+    const deviceId = `fresh-device-${randomUUID()}`;
+    const result = await api('POST', '/v1/auth/login', {
+      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
+    });
+    assert.equal(result.status, 200);
+
+    const row = db.prepare('SELECT approved_at, revoked_at FROM devices WHERE device_id = ?')
+      .get(deviceId) as { approved_at: string | null; revoked_at: string | null } | undefined;
+    assert.ok(row, 'a device row is still recorded, purely as an audit trail');
+    assert.equal(row!.approved_at, null);
+    assert.equal(row!.revoked_at, null);
+  });
+
+  test('a device revoked directly in the database (legacy data) no longer blocks the user', async () => {
+    const deviceId = `fresh-device-${randomUUID()}`;
+    const first = await api('POST', '/v1/auth/login', {
+      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
+    });
+
+    const deviceRow = db.prepare('SELECT id FROM devices WHERE device_id = ?').get(deviceId) as { id: string };
+    db.prepare('UPDATE devices SET revoked_at = ? WHERE id = ?').run(nowIso(), deviceRow.id);
+
+    // Same, still-live access token must keep working — device standing is
+    // no longer consulted anywhere in the authenticated request path.
+    const me = await api('GET', '/v1/auth/me', undefined, first.json.accessToken);
+    assert.equal(me.status, 200);
+
+    // A brand-new login with that same (now "revoked") device id must also succeed.
+    const relogin = await api('POST', '/v1/auth/login', {
+      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
+    });
+    assert.equal(relogin.status, 200);
+  });
+
+  test('a legacy device-bound token (did claim pointing at a revoked device) still authenticates', async () => {
+    // Simulates both a token minted before this change and one whose device
+    // row was revoked under the old regime — the authenticate middleware must
+    // no longer look the claim up at all.
     const officerRow = db.prepare(
       `SELECT id, org_id, role, full_name, email FROM users WHERE email = 'officer@dp-logistics.example'`,
     ).get() as any;
+
+    const revokedDeviceRowId = newId();
+    db.prepare(
+      `INSERT INTO devices (id, user_id, device_id, revoked_at, created_at) VALUES (?,?,?,?,?)`,
+    ).run(revokedDeviceRowId, officerRow.id, 'old-revoked-device', nowIso(), nowIso());
+
+    const { signAccessToken } = await import('../lib/auth.ts');
     const legacyToken = signAccessToken({
       id: officerRow.id, orgId: officerRow.org_id, email: officerRow.email,
       fullName: officerRow.full_name, role: officerRow.role,
-    });
+    }, revokedDeviceRowId);
 
-    // No did claim -> the authenticate middleware's device check is skipped
-    // entirely -> the token works exactly as it did before this deployment.
     const me = await api('GET', '/v1/auth/me', undefined, legacyToken);
     assert.equal(me.status, 200);
+  });
 
-    // It becomes device-bound again the next time this user logs in through
-    // the mobile app with a deviceId — a normal login, not a special step.
-    const rebound = await login('officer@dp-logistics.example'); // uses pre-approved test-device-01
-    assert.ok(rebound.accessToken);
-    assert.equal(rebound.deviceStatus, 'approved');
+  test('refresh succeeds even when the refresh token is bound to a never-approved device', async () => {
+    const deviceId = `fresh-device-${randomUUID()}`;
+    const loggedIn = await api('POST', '/v1/auth/login', {
+      email: 'officer@dp-logistics.example', password: SEED_PASSWORD, deviceId,
+    });
+
+    const refreshed = await api('POST', '/v1/auth/refresh', { refreshToken: loggedIn.json.refreshToken });
+    assert.equal(refreshed.status, 200);
+    assert.ok(refreshed.json.accessToken);
+  });
+
+  test('device-management admin endpoints are gone — approval is no longer part of the product', async () => {
+    const adminToken = (await login('admin@dp-logistics.example')).accessToken;
+
+    // These routes no longer exist at all — Express's own unmatched-route
+    // handler returns a plain-HTML 404, not the app's JSON error shape, so
+    // this checks status only rather than going through the api() helper.
+    const rawStatus = async (method: string, path: string) => {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      return response.status;
+    };
+
+    assert.equal(await rawStatus('GET', '/v1/admin/devices'), 404);
+    assert.equal(await rawStatus('POST', '/v1/admin/devices/whatever/approve'), 404);
+    assert.equal(await rawStatus('POST', '/v1/admin/devices/whatever/revoke'), 404);
+  });
+
+  test('organization isolation still holds for authenticated requests once device approval is removed', async () => {
+    const otherOrgId = newId();
+    db.prepare('INSERT INTO organizations (id, name, created_at) VALUES (?,?,?)')
+      .run(otherOrgId, 'Other Org', nowIso());
+
+    const otherOfficerId = newId();
+    db.prepare(
+      `INSERT INTO users (id, org_id, email, password_hash, full_name, role, created_at)
+       VALUES (?,?,?,?,?,?,?)`,
+    ).run(otherOfficerId, otherOrgId, 'officer@other-org.example',
+      hashPassword(SEED_PASSWORD), 'Other Officer', 'field_officer', nowIso());
+
+    // A user in a brand-new org, with zero device history, must still be able
+    // to log in — there is no approval step to have skipped.
+    const otherToken = (await api('POST', '/v1/auth/login', {
+      email: 'officer@other-org.example', password: SEED_PASSWORD,
+    })).json.accessToken;
+    assert.ok(otherToken);
+
+    // But that user has no assignment to the seeded org's location — org/role
+    // scoping must still independently reject the request.
+    const attempt = await api(
+      'GET', `/v1/sync/reports?locationId=${fixture.locationId}`, undefined, otherToken,
+    );
+    assert.equal(attempt.status, 403);
   });
 
   test('wrong password is rejected without revealing the account exists', async () => {

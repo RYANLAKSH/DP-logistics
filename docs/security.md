@@ -87,7 +87,7 @@ Stored alongside each image:
 | SHA-256 | Detects any later modification, in storage or in transit |
 | GPS + accuracy | A reconciliation from 40 km off-site is a fraud signal |
 | Device clock and server receipt time | Clock tampering shows up as skew |
-| Officer identity and device id | Devices need supervisor approval before use |
+| Officer identity and device id | Recorded for audit; not an access gate — see "Auth and roles" in architecture.md |
 | Report reference **and version** | What the decision was actually judged against |
 | OCR proposal vs. confirmed value | Whether a human corrected the machine |
 
@@ -148,8 +148,8 @@ behind that as a second line.
 this?" is a question that gets asked in disputes and cannot be answered
 retroactively.
 
-Roles: officers scan; supervisors approve overrides and devices; admins manage
-reports, users and documents; auditors read everything and change nothing.
+Roles: officers scan; supervisors approve overrides; admins manage reports,
+users and documents; auditors read everything and change nothing.
 
 ## What this does not protect against
 

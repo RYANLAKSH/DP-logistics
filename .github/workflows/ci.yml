@@ -21,14 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No engines field or .nvmrc exists anywhere in the repo to pin this, so
-      # this matches the Node version the project has actually been built and
-      # tested against (node --experimental-strip-types is used by every
-      # workspace's dev/test scripts, and packages/api's db.ts uses node:sqlite
-      # via DatabaseSync — both need a recent Node runtime).
+      # Reads .nvmrc (Stage 15) so local dev, CI, and the version documented
+      # for production are pinned from one place, not three. Node 26 is what
+      # this project has actually been built and tested against throughout —
+      # node --experimental-strip-types is used by every workspace's dev/test
+      # scripts, and packages/api's db.ts uses node:sqlite via DatabaseSync —
+      # both need a recent Node runtime.
       - uses: actions/setup-node@v4
         with:
-          node-version: '26'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       # package-lock.json is authoritative: npm ci installs exactly what it

@@ -144,6 +144,11 @@ next sync.
 
 ## 6. Auth and roles
 
+DP Logistics is web-first: a client is authenticated by credentials alone, not by a
+separately-approved device or browser. The model is
+`LOGIN → AUTHENTICATED SESSION → ROLE + ORGANIZATION AUTHORIZATION → APPLICATION` —
+there is no device registration or supervisor-approval step between login and access.
+
 JWT with short-lived access tokens (15 min) and rotating refresh tokens (30 days, stored
 in device secure storage). Long refresh windows are deliberate — officers should not be
 re-authenticating at a gate.
@@ -155,9 +160,7 @@ re-authenticating at a gate.
 | `admin` | Upload/amend reports, manage users, configure email recipients, full visibility |
 | `auditor` | Read-only across everything, including evidence images. No mutations |
 
-Additional controls worth having from day one:
-- **Device binding.** Register `device_id` per officer; a login from an unregistered device
-  needs supervisor approval. Cheap, and it closes the "officer shares credentials" hole.
+Additional controls:
 - **Location scoping.** Officers only see reports for locations they're assigned to.
 - **Biometric unlock** for app resume; full re-login only on refresh expiry.
 

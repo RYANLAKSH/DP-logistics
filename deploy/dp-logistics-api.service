@@ -1,0 +1,48 @@
+# systemd unit for the DP Logistics API (packages/api's start.ts).
+#
+# A template, not a live configuration — nothing in this repository installs
+# or enables this on any server. Copy it to /etc/systemd/system/ on the
+# actual host, adjust the paths marked below, then:
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dp-logistics-api
+#
+# See docs/deployment.md for the full runbook, including why systemd (not
+# PM2) is the recommended choice for a self-managed Hostinger VPS.
+
+[Unit]
+Description=DP Logistics API
+After=network.target
+
+[Service]
+Type=simple
+
+# --- Adjust for the actual host ---
+User=dplogistics
+Group=dplogistics
+WorkingDirectory=/opt/dp-logistics
+# Holds DB_PATH, STORAGE_DIR, BACKUP_DIR, JWT_SECRET, STORAGE_SECRET,
+# PUBLIC_BASE_URL, PORT, and SMTP_* if used. Never inside the git repo, never
+# world-readable — see docs/deployment.md, "Secrets."
+EnvironmentFile=/etc/dp-logistics/api.env
+ExecStart=/usr/bin/npm run start -w @dp/api
+# -----------------------------------
+
+Restart=on-failure
+RestartSec=5
+
+# A crash-restart loop should not mask a genuinely broken deployment forever.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Pilot-scale ceiling; raise only with evidence the default is actually hit.
+LimitNOFILE=4096
+
+# Defense in depth: this process does not need to touch anything outside its
+# own data directories.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/dp-logistics /var/lib/dp-logistics
+
+[Install]
+WantedBy=multi-user.target

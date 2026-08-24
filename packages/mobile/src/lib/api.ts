@@ -36,10 +36,11 @@ export async function clearTokens(): Promise<void> {
 }
 
 /**
- * A stable per-install identifier for device binding, persisted so a normal
- * restart never looks like a new device — only a reinstall (which clears
- * SecureStore) does, which is the intended behaviour: a reinstall needs
- * supervisor re-approval, a restart never should.
+ * A stable per-install identifier sent with login, persisted so a normal
+ * restart never looks like a new device. It is purely informational
+ * bookkeeping now (device approval is no longer an access gate — see
+ * server.ts's login route) and only ties scan_sessions and refresh tokens
+ * back to the client instance that produced them, for audit purposes.
  *
  * `store` is injectable so this can be unit-tested without the native
  * SecureStore module; it defaults to the real one for all real callers.
@@ -130,7 +131,6 @@ export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
   user: { id: string; fullName: string; email: string; role: string; orgId: string };
-  deviceStatus: 'approved' | 'pending_approval' | 'revoked' | 'not_registered';
   locations: { id: string; code: string; name: string }[];
 }
 
@@ -143,9 +143,7 @@ export async function login(
   const result = await call<LoginResponse>('POST', '/v1/auth/login', {
     email, password, deviceId, platform: 'android', appVersion,
   });
-  // An unapproved/revoked device gets a 403 with no tokens (server-enforced,
-  // not a client decision) — only store tokens when there are actually some.
-  if (result.ok && result.data.accessToken) {
+  if (result.ok) {
     await setTokens(result.data.accessToken, result.data.refreshToken);
   }
   return result;

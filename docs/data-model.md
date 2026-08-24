@@ -44,7 +44,9 @@ CREATE TABLE user_locations (
   PRIMARY KEY (user_id, location_id)
 );
 
--- Device binding: an unregistered device requires supervisor approval.
+-- Audit bookkeeping only: which client instance a login/session came from.
+-- Not an access gate — approved_at/approved_by/revoked_at are no longer read
+-- by any authorization check (see architecture.md, "Auth and roles").
 CREATE TABLE devices (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       UUID NOT NULL REFERENCES users(id),

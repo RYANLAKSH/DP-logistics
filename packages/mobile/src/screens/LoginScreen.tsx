@@ -27,20 +27,11 @@ export function LoginScreen({ deviceId, onSignedIn }: Props) {
     setBusy(false);
 
     if (!result.ok) {
-      // Offline, bad credentials, and a not-yet-approved device are three
-      // distinct situations, and the officer needs to know which one applies —
-      // only one of them is something they can fix by trying again.
-      if (result.code === 'DEVICE_PENDING_APPROVAL') {
-        setError('This device is waiting for supervisor approval. Ask your supervisor to approve it, then try again.');
-      } else if (result.code === 'DEVICE_REVOKED') {
-        setError('This device has been revoked. Contact your supervisor.');
-      } else {
-        setError(
-          result.offline
-            ? 'No connection. You must be online to sign in the first time.'
-            : result.message,
-        );
-      }
+      setError(
+        result.offline
+          ? 'No connection. You must be online to sign in the first time.'
+          : result.message,
+      );
       return;
     }
     onSignedIn(result.data);

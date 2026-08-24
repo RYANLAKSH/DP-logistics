@@ -181,18 +181,6 @@ export function createServer(db: Db) {
     // deactivation or role change must take effect before the token expires.
     if (!row || !row.is_active) return fail(res, 401, 'UNAUTHENTICATED', 'User is not active');
 
-    // Re-check device standing on every request, the same way the user row
-    // above is re-read on every request: a device revoked mid-session must be
-    // cut off on its very next call, not merely blocked from a future login.
-    if (claims.did) {
-      const device = db
-        .prepare('SELECT approved_at, revoked_at FROM devices WHERE id = ?')
-        .get(claims.did) as { approved_at: string | null; revoked_at: string | null } | undefined;
-      if (!device || device.revoked_at || !device.approved_at) {
-        return fail(res, 401, 'DEVICE_REVOKED', 'This device is no longer authorized');
-      }
-    }
-
     req.user = {
       id: String(row.id),
       orgId: String(row.org_id),
@@ -254,43 +242,28 @@ export function createServer(db: Db) {
       role: String(row.role) as Role,
     };
 
-    let deviceStatus: 'approved' | 'pending_approval' | 'revoked' | 'not_registered' = 'not_registered';
+    // Device approval is no longer an access gate (Stage 11 — DP Logistics is
+    // web-first, and a browser is not a separately-approved security
+    // principal). When a client supplies a deviceId this still records/updates
+    // a devices row purely as bookkeeping — it links scan_sessions and
+    // refresh_tokens back to the client instance that produced them for
+    // audit purposes — but nothing about that row's state can block a login.
     let deviceRowId: string | undefined;
     if (deviceId) {
       const existing = db
-        .prepare('SELECT id, approved_at, revoked_at FROM devices WHERE user_id = ? AND device_id = ?')
-        .get(user.id, deviceId) as { id: string; approved_at: string | null; revoked_at: string | null } | undefined;
+        .prepare('SELECT id FROM devices WHERE user_id = ? AND device_id = ?')
+        .get(user.id, deviceId) as { id: string } | undefined;
 
       if (existing) {
         db.prepare('UPDATE devices SET last_seen_at = ?, app_version = ? WHERE id = ?')
           .run(nowIso(), appVersion ?? null, existing.id);
-        deviceStatus = existing.revoked_at ? 'revoked' : existing.approved_at ? 'approved' : 'pending_approval';
         deviceRowId = existing.id;
       } else {
-        // A new device registers itself but starts unapproved. Cheap control
-        // that closes the shared-credentials hole.
         deviceRowId = newId();
         db.prepare(
           `INSERT INTO devices (id, user_id, device_id, platform, app_version, last_seen_at, created_at)
            VALUES (?,?,?,?,?,?,?)`,
         ).run(deviceRowId, user.id, deviceId, platform ?? null, appVersion ?? null, nowIso(), nowIso());
-        deviceStatus = 'pending_approval';
-      }
-
-      // The whole point of device binding: a device that isn't approved gets
-      // no usable tokens, not just an informational status the caller could
-      // choose to ignore. Enforced here, server-side — never trust the
-      // mobile UI to be the one deciding whether to proceed.
-      if (deviceStatus !== 'approved') {
-        return fail(
-          res,
-          403,
-          deviceStatus === 'revoked' ? 'DEVICE_REVOKED' : 'DEVICE_PENDING_APPROVAL',
-          deviceStatus === 'revoked'
-            ? 'This device has been revoked. Contact your supervisor.'
-            : 'This device needs supervisor approval before it can be used.',
-          { user, deviceStatus },
-        );
       }
     }
 
@@ -309,7 +282,6 @@ export function createServer(db: Db) {
       refreshToken: issueRefreshToken(db, user.id, deviceRowId),
       expiresIn: ACCESS_TTL_SECONDS,
       user,
-      deviceStatus,
       locations,
     });
   });
@@ -660,7 +632,7 @@ export function createServer(db: Db) {
   });
 
   /* ---------------------------------------------------------------- *
-   * Admin — users, devices, recipients, dashboard
+   * Admin — users, recipients, dashboard
    * ---------------------------------------------------------------- */
 
   const userSchema = z.object({
@@ -699,53 +671,6 @@ export function createServer(db: Db) {
     });
 
     res.status(201).json({ id });
-  });
-
-  app.get('/v1/admin/devices', authenticate, require('supervisor'), (req, res) => {
-    const rows = db
-      .prepare(
-        `SELECT d.*, u.full_name, u.email FROM devices d
-           JOIN users u ON u.id = d.user_id
-          WHERE u.org_id = ? AND (? = 'all' OR (? = 'pending' AND d.approved_at IS NULL))`,
-      )
-      .all(req.user!.orgId, String(req.query.status ?? 'all'), String(req.query.status ?? 'all'));
-    res.json({ devices: rows });
-  });
-
-  app.post('/v1/admin/devices/:id/approve', authenticate, require('supervisor'), (req, res) => {
-    // Scoped to the caller's own org, the same way the list route above is —
-    // an opaque device row id must not let a supervisor act on another org's
-    // device. Also clears any prior revocation, so a device can be
-    // re-approved later rather than being a permanent dead end.
-    const changed = db
-      .prepare(
-        `UPDATE devices SET approved_at = ?, approved_by = ?, revoked_at = NULL
-          WHERE id = ? AND user_id IN (SELECT id FROM users WHERE org_id = ?)`,
-      )
-      .run(nowIso(), req.user!.id, String(req.params.id), req.user!.orgId);
-
-    if (changed.changes === 0) return fail(res, 404, 'NOT_FOUND', 'Device not found');
-    audit(db, {
-      orgId: req.user!.orgId, actorId: req.user!.id, action: 'device.approve',
-      entityType: 'device', entityId: String(req.params.id),
-    });
-    res.status(204).end();
-  });
-
-  app.post('/v1/admin/devices/:id/revoke', authenticate, require('supervisor'), (req, res) => {
-    const changed = db
-      .prepare(
-        `UPDATE devices SET revoked_at = ?
-          WHERE id = ? AND user_id IN (SELECT id FROM users WHERE org_id = ?)`,
-      )
-      .run(nowIso(), String(req.params.id), req.user!.orgId);
-
-    if (changed.changes === 0) return fail(res, 404, 'NOT_FOUND', 'Device not found');
-    audit(db, {
-      orgId: req.user!.orgId, actorId: req.user!.id, action: 'device.revoke',
-      entityType: 'device', entityId: String(req.params.id),
-    });
-    res.status(204).end();
   });
 
   const recipientSchema = z.object({

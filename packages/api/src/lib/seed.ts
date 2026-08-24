@@ -54,14 +54,6 @@ export function seed(db: Db): SeedResult {
     db.prepare('INSERT INTO user_locations (user_id, location_id) VALUES (?,?)')
       .run(id, locationId);
 
-    // One pre-approved device per seeded user, so tests that exercise the
-    // normal (device-bound) login path don't each need to run their own
-    // approval flow just to get past device-approval enforcement.
-    db.prepare(
-      `INSERT INTO devices (id, user_id, device_id, approved_at, approved_by, last_seen_at, created_at)
-       VALUES (?,?,?,?,?,?,?)`,
-    ).run(newId(), id, 'test-device-01', nowIso(), id, nowIso(), nowIso());
-
     if (person.role === 'admin') adminId = id;
     users.push({ email: person.email, password: SEED_PASSWORD, role: person.role });
   }

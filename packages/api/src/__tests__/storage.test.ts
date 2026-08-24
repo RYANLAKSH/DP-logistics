@@ -6,7 +6,7 @@
  * behaviour is ours to get right, not a cloud provider's.
  */
 
-import { test, describe, before, after } from 'node:test';
+import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,6 +19,8 @@ import {
   isValidKey,
   MAX_IMAGE_BYTES,
   ALLOWED_CONTENT_TYPES,
+  getStorage,
+  setStorage,
 } from '../lib/storage.ts';
 
 let root: string;
@@ -199,5 +201,94 @@ describe('limits', () => {
     assert.equal(ALLOWED_CONTENT_TYPES.has('image/jpeg'), true);
     assert.equal(ALLOWED_CONTENT_TYPES.has('application/pdf'), false);
     assert.equal(ALLOWED_CONTENT_TYPES.has('text/html'), false);
+  });
+});
+
+/**
+ * getStorage()'s local-driver secret must fail closed, unconditionally — no
+ * environment, and no value of NODE_ENV in particular, may cause it to hand
+ * back a driver signed with a secret it didn't read from STORAGE_SECRET. This
+ * is the Stage 11 regression test for that property, mirroring auth.test.ts's
+ * coverage of the identical getJwtSecret() fix. See getStorage()'s own
+ * comment for the history: this was previously gated on
+ * NODE_ENV === 'production' and fell back to a fresh random secret
+ * otherwise, which breaks every previously-issued capability URL on the next
+ * restart without ever surfacing an error.
+ */
+describe('getStorage — fail-closed behaviour (local driver)', () => {
+  const ORIGINAL_STORAGE_SECRET = process.env.STORAGE_SECRET;
+  const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+  const ORIGINAL_S3_BUCKET = process.env.S3_BUCKET;
+
+  beforeEach(() => {
+    delete process.env.STORAGE_SECRET;
+    delete process.env.NODE_ENV;
+    delete process.env.S3_BUCKET;
+    setStorage(null);
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_STORAGE_SECRET === undefined) delete process.env.STORAGE_SECRET;
+    else process.env.STORAGE_SECRET = ORIGINAL_STORAGE_SECRET;
+
+    if (ORIGINAL_NODE_ENV === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+
+    if (ORIGINAL_S3_BUCKET === undefined) delete process.env.S3_BUCKET;
+    else process.env.S3_BUCKET = ORIGINAL_S3_BUCKET;
+
+    setStorage(null);
+  });
+
+  test('missing STORAGE_SECRET throws, in every NODE_ENV — never a random fallback secret', () => {
+    for (const nodeEnv of [undefined, 'development', 'test', 'staging', 'production', 'PRODUCTION', '']) {
+      if (nodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = nodeEnv;
+      setStorage(null);
+
+      assert.throws(
+        () => getStorage(),
+        /STORAGE_SECRET is not set/,
+        `expected getStorage() to throw with NODE_ENV=${JSON.stringify(nodeEnv)}`,
+      );
+    }
+  });
+
+  test('empty STORAGE_SECRET throws, regardless of NODE_ENV', () => {
+    process.env.STORAGE_SECRET = '';
+    assert.throws(() => getStorage(), /STORAGE_SECRET is not set/);
+
+    process.env.NODE_ENV = 'development';
+    setStorage(null);
+    assert.throws(() => getStorage(), /STORAGE_SECRET is not set/);
+  });
+
+  test('whitespace-only STORAGE_SECRET is treated as empty', () => {
+    process.env.STORAGE_SECRET = '   ';
+    assert.throws(() => getStorage(), /STORAGE_SECRET is not set/);
+  });
+
+  test('a real, non-empty STORAGE_SECRET is accepted and produces a working local driver', () => {
+    process.env.STORAGE_SECRET = 'a-real-configured-secret';
+    const driver = getStorage();
+    assert.ok(driver instanceof LocalStorageDriver);
+  });
+
+  test('NODE_ENV plays no role once a real STORAGE_SECRET is set', () => {
+    process.env.STORAGE_SECRET = 'a-real-configured-secret';
+    for (const nodeEnv of [undefined, 'development', 'production', 'anything-else']) {
+      if (nodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = nodeEnv;
+      setStorage(null);
+
+      assert.ok(getStorage() instanceof LocalStorageDriver);
+    }
+  });
+
+  test('S3_BUCKET bypasses the local-secret requirement entirely, in any environment', () => {
+    process.env.S3_BUCKET = 'some-bucket';
+    // No STORAGE_SECRET set at all — the S3 driver has its own credential
+    // model and must not be blocked by the local driver's secret check.
+    assert.doesNotThrow(() => getStorage());
   });
 });
