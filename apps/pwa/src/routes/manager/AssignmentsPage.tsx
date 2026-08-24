@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { Table, Td } from '@/components/Table'
 import { useData } from '@/data/provider'
 import { assignmentStatusKey } from '@/lib/status'
+import { useActiveYard } from '@/lib/useActiveYard'
 
 const FILTERS = ['ALL', 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'EXCEPTION'] as const
 
@@ -15,9 +16,12 @@ export function AssignmentsPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('ALL')
   const [query, setQuery] = useState('')
 
+  const { yardId } = useActiveYard()
+
   const { data: assignments, isLoading } = useQuery({
-    queryKey: ['assignments', 'yard-nsa'],
-    queryFn: () => data.listAssignments('yard-nsa'),
+    queryKey: ['assignments', yardId],
+    queryFn: () => data.listAssignments(yardId!),
+    enabled: Boolean(yardId),
   })
 
   const rows = useMemo(() => {

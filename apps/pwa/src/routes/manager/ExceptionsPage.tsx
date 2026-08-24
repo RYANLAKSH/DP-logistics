@@ -8,6 +8,7 @@ import { EmptyState, Spinner } from '@/components/States'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
 import { relativeTime } from '@/lib/format'
+import { useActiveYard } from '@/lib/useActiveYard'
 import { EvidenceAttemptCard } from '@/components/Evidence'
 import type { ExceptionRecord } from '@/data/types'
 
@@ -50,9 +51,12 @@ export function ExceptionsPage() {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<ExceptionRecord | null>(null)
 
+  const { yardId } = useActiveYard()
+
   const { data: exceptions, isLoading } = useQuery({
-    queryKey: ['exceptions', 'yard-nsa'],
-    queryFn: () => data.listExceptions('yard-nsa'),
+    queryKey: ['exceptions', yardId],
+    queryFn: () => data.listExceptions(yardId!),
+    enabled: Boolean(yardId),
   })
 
   const [error, setError] = useState<string | null>(null)

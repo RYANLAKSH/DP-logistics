@@ -5,6 +5,7 @@ import { Card, CardHeader } from '@/components/Card'
 import { ManagerShell } from '@/components/Layout'
 import { useData, useIsMockBackend } from '@/data/provider'
 import { MANIFEST_ACCEPT, sniffManifestKind } from '@/lib/manifestFile'
+import { useActiveYard } from '@/lib/useActiveYard'
 
 const MAX_BYTES = 10 * 1024 * 1024
 
@@ -18,6 +19,7 @@ export function ManifestUploadPage() {
   const [busy, setBusy] = useState(false)
   const [pasted, setPasted] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const { yardId, yards, loading: yardsLoading } = useActiveYard()
 
   async function onPick(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null
@@ -51,10 +53,18 @@ export function ManifestUploadPage() {
 
   async function onParse(source: File | null = file) {
     if (!source) return
+    // A yard is required, and saying so beats sending a request that cannot
+    // succeed. This is only reachable if the account has no yard at all.
+    if (!yardId) {
+      setError(
+        'No yard is set up for this account yet, so there is nowhere to file this manifest.',
+      )
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const imported = await data.parseManifestFile(source, 'yard-nsa', date)
+      const imported = await data.parseManifestFile(source, yardId, date)
       navigate(`/manager/manifests/import/${imported.id}`)
     } catch (e) {
       // A parse failure has to say what went wrong. "Upload failed" leaves an
@@ -66,7 +76,14 @@ export function ManifestUploadPage() {
   }
 
   return (
-    <ManagerShell title="Upload a manifest" subtitle="Nhava Sheva">
+    <ManagerShell
+      title="Upload a manifest"
+      subtitle={
+        yardsLoading
+          ? 'Finding your yard…'
+          : yards.find((y) => y.id === yardId)?.name ?? 'No yard assigned'
+      }
+    >
       <div className="max-w-2xl space-y-4">
         <Card>
           <CardHeader

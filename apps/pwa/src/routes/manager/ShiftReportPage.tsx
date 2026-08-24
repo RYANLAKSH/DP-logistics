@@ -6,7 +6,7 @@ import { ManagerShell } from '@/components/Layout'
 import { SlotDots } from '@/components/Progress'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { useData } from '@/data/provider'
-import { useSession } from '@/lib/session'
+import { useActiveYard } from '@/lib/useActiveYard'
 import { dateLong } from '@/lib/format'
 
 /**
@@ -21,14 +21,8 @@ import { dateLong } from '@/lib/format'
  */
 export function ShiftReportPage() {
   const data = useData()
-  const { profile } = useSession()
-  const yards = useQuery({ queryKey: ['yards'], queryFn: () => data.listYards() })
+  const { yardId: activeYard, setYardId, yards } = useActiveYard()
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [yardId, setYardId] = useState<string | null>(null)
-
-  const activeYard = yardId
-    ?? yards.data?.find((y) => profile?.yardIds.includes(y.id))?.id
-    ?? yards.data?.[0]?.id ?? null
 
   const report = useQuery({
     queryKey: ['shift-report', activeYard, date],
@@ -50,7 +44,7 @@ export function ShiftReportPage() {
                 onChange={(e) => setYardId(e.target.value)}
                 className="rounded-lg border-2 border-line/40 px-3 py-2 text-sm"
               >
-                {yards.data?.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
+                {yards.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
               </select>
             </label>
             <label className="block">

@@ -7,7 +7,7 @@ import { ProgressBar, SlotDots } from '@/components/Progress'
 import { EmptyState, ErrorState, Spinner } from '@/components/States'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useData } from '@/data/provider'
-import { useSession } from '@/lib/session'
+import { useActiveYard } from '@/lib/useActiveYard'
 import { dateLong, relativeTime, timeOfDay } from '@/lib/format'
 import type { ConnectionState } from '@/lib/realtime'
 import type { ActivityItem } from '@/data/types'
@@ -17,21 +17,14 @@ type FeedFilter = 'ALL' | 'MOVEMENTS' | 'EXCEPTIONS'
 export function DashboardPage() {
   const data = useData()
   const queryClient = useQueryClient()
-  const { profile } = useSession()
 
-  const yards = useQuery({ queryKey: ['yards'], queryFn: () => data.listYards() })
-  const [yardId, setYardId] = useState<string | null>(null)
+  const { yardId: activeYard, setYardId, yards } = useActiveYard()
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('ALL')
   const [driverFilter, setDriverFilter] = useState('ALL')
   const [containerQuery, setContainerQuery] = useState('')
-
-  const activeYard = yardId
-    ?? yards.data?.find((y) => profile?.yardIds.includes(y.id))?.id
-    ?? yards.data?.[0]?.id
-    ?? null
 
   const board = useQuery({
     queryKey: ['board', activeYard, date],
@@ -94,7 +87,7 @@ export function DashboardPage() {
 
   return (
     <ManagerShell
-      title={yards.data?.find((y) => y.id === activeYard)?.name ?? 'Board'}
+      title={yards.find((y) => y.id === activeYard)?.name ?? 'Board'}
       subtitle={dateLong(date)}
       action={<ConnectionBadge state={connection} lastUpdate={lastUpdate} />}
     >
@@ -110,7 +103,7 @@ export function DashboardPage() {
                 onChange={(e) => setYardId(e.target.value)}
                 className="rounded-lg border-2 border-line/40 px-3 py-2 text-sm"
               >
-                {yards.data?.map((y) => (
+                {yards.map((y) => (
                   <option key={y.id} value={y.id}>{y.name}</option>
                 ))}
               </select>
