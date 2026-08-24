@@ -852,8 +852,40 @@ export function createServer(db: Db) {
     }
   }));
 
+  /**
+   * Field officers may read evidence only for reconciliations whose scan
+   * session happened at a location they're assigned to — the same
+   * user_locations check assertLocationAccess already applies to sync.
+   * supervisor/admin/auditor read any reconciliation in the org.
+   */
+  const canReadReconciliationEvidence = (user: AuthUser, sessionLocationId: string | null): boolean => {
+    if (!sessionLocationId) return false;
+    if (user.role === 'auditor' || atLeast(user.role, 'supervisor')) return true;
+    const row = db
+      .prepare('SELECT 1 AS ok FROM user_locations WHERE user_id = ? AND location_id = ?')
+      .get(user.id, sessionLocationId);
+    return Boolean(row);
+  };
+
   /** Viewing links for a reconciliation's images. Every issue is logged. */
   app.get('/v1/reconciliations/:id/evidence', authenticate, wrap(async (req, res) => {
+    const reconciliation = db
+      .prepare(
+        `SELECT ss.location_id FROM reconciliations r
+           JOIN scan_sessions ss ON ss.id = r.session_id
+          WHERE r.id = ? AND r.org_id = ?`,
+      )
+      .get(String(req.params.id), req.user!.orgId) as { location_id: string } | undefined;
+
+    // Same 404 whether the reconciliation doesn't exist, belongs to another
+    // org (already excluded by the WHERE clause above), or exists but this
+    // officer isn't assigned to its location — a 403 there would confirm the
+    // record exists at all, which is exactly the information an unauthorized
+    // reader should not get.
+    if (!reconciliation || !canReadReconciliationEvidence(req.user!, reconciliation.location_id)) {
+      return fail(res, 404, 'NOT_FOUND', 'Reconciliation not found');
+    }
+
     const items = await evidenceForReconciliation(db, req.user!.orgId, String(req.params.id), {
       id: req.user!.id,
       ip: req.ip ?? null,

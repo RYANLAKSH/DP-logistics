@@ -14,8 +14,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { openDb, type Db } from '../lib/db.ts';
+import { openDb, newId, nowIso, type Db } from '../lib/db.ts';
 import { seed, SEED_PASSWORD, type SeedResult } from '../lib/seed.ts';
+import { hashPassword } from '../lib/auth.ts';
 import { createServer } from '../server.ts';
 import { LocalStorageDriver, setStorage } from '../lib/storage.ts';
 
@@ -552,6 +553,53 @@ describe('viewing evidence', () => {
   test('unauthenticated requests are refused', async () => {
     const result = await api('GET', `/v1/reconciliations/${reconciliationId}/evidence`);
     assert.equal(result.status, 401);
+  });
+
+  test('a field officer at a different location cannot read this evidence', async () => {
+    // A fresh location and a field officer who has never been assigned to
+    // fixture.locationId, the one this reconciliation actually happened at.
+    const otherLocationId = newId();
+    db.prepare('INSERT INTO locations (id, org_id, code, name) VALUES (?,?,?,?)')
+      .run(otherLocationId, fixture.orgId, 'INOTHER', 'Other Gate');
+
+    const outsiderId = newId();
+    db.prepare(
+      `INSERT INTO users (id, org_id, email, password_hash, full_name, role, created_at)
+       VALUES (?,?,?,?,?,?,?)`,
+    ).run(outsiderId, fixture.orgId, 'outsider@dp-logistics.example',
+          hashPassword(SEED_PASSWORD), 'Outsider Officer', 'field_officer', nowIso());
+    db.prepare('INSERT INTO user_locations (user_id, location_id) VALUES (?,?)')
+      .run(outsiderId, otherLocationId);
+
+    const outsiderLogin = await api('POST', '/v1/auth/login', {
+      email: 'outsider@dp-logistics.example', password: SEED_PASSWORD,
+    });
+    const outsiderToken = outsiderLogin.json.accessToken;
+
+    const result = await api(
+      'GET', `/v1/reconciliations/${reconciliationId}/evidence`, undefined, outsiderToken);
+    assert.equal(result.status, 404,
+      "an officer not assigned to this reconciliation's location must not be able to tell it exists");
+  });
+
+  test('a supervisor can read evidence for any location in the org', async () => {
+    const supervisorLogin = await api('POST', '/v1/auth/login', {
+      email: 'supervisor@dp-logistics.example', password: SEED_PASSWORD,
+    });
+    const result = await api(
+      'GET', `/v1/reconciliations/${reconciliationId}/evidence`, undefined,
+      supervisorLogin.json.accessToken);
+    assert.equal(result.status, 200);
+  });
+
+  test('an auditor can read evidence for any location in the org', async () => {
+    const auditorLogin = await api('POST', '/v1/auth/login', {
+      email: 'auditor@dp-logistics.example', password: SEED_PASSWORD,
+    });
+    const result = await api(
+      'GET', `/v1/reconciliations/${reconciliationId}/evidence`, undefined,
+      auditorLogin.json.accessToken);
+    assert.equal(result.status, 200);
   });
 });
 
